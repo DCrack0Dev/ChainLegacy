@@ -1,0 +1,19 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/check-status",
+      "schedule": "0 * * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/cron/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "none"
+        }
+      ]
+    }
+  ]
+}

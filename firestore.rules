@@ -1,0 +1,55 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /audit_trail/{logId} {
+        // Client writes are NEVER allowed — only server (admin SDK).
+        // Audit logs are written server-only.
+        allow write: if false;
+        allow read: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    match /vaults/{vaultId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == resource.data.ownerId
+        && request.auth.uid == request.resource.data.ownerId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.ownerId;
+    }
+
+    match /SystemLogs/{logId} {
+      // Server-admin-only audit sink.
+      allow read, write: if false;
+    }
+
+    match /SystemMeta/{metaId} {
+      // TTL locks, cron locks, cursor pagination markers.
+      allow read, write: if false;
+    }
+
+    match /organizations/{orgId} {
+      allow read, write: if false;
+      match /customers/{customerId} { allow read, write: if false; }
+      match /legacyPlans/{planId} { allow read, write: if false; }
+      match /beneficiaries/{benId} { allow read, write: if false; }
+      match /guardians/{guardId} { allow read, write: if false; }
+      match /livenessResets/{resetId} { allow read, write: if false; }
+      match /apiKeys/{keyId} { allow read, write: if false; }
+      match /claims/{claimId} { allow read, write: if false; }
+      match /auditEvents/{eventId} { allow read, write: if false; }
+      match /rateLimitBuckets/{bucketId} { allow read, write: if false; }
+      match /idempotency/{idempId} { allow read, write: if false; }
+      match /securityEvents/{sevId} { allow read, write: if false; }
+      match /guardianNonces/{nonceId} { allow read, write: if false; }
+      match /webhooks/{whId} {
+        allow read, write: if false;
+        match /deliveries/{delId} { allow read, write: if false; }
+      }
+      match /webhookEvents/{wevId} { allow read, write: if false; }
+      match /webhookDeadLetters/{dlId} { allow read, write: if false; }
+    }
+  }
+}

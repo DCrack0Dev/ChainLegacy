@@ -1,0 +1,600 @@
+{
+  "info": {
+    "name": "ChainLegacy API v1 - Sandbox (Final)",
+    "_postman_id": "chainlegacy-sandbox-final",
+    "description": "Final importable Postman collection for ChainLegacy API v1 — execution-focused sandbox quickstart.\n\nDO NOT include real secrets in exported collections.\nFollow the 5-minute run in folder order.\n\nFolders: 01 - Authentication, 02 - Organization, 03 - Customer, 04 - Legacy Plan, 05 - Guardian, 06 - Liveness, 07 - Claims, 08 - Webhooks, 09 - Audit, 10 - Operator Only",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Authentication",
+      "item": [
+        {
+          "name": "Firebase Sign-In (email/password)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{firebaseTestUserEmail}}\",\n  \"password\": \"{{firebaseTestUserPassword}}\",\n  \"returnSecureToken\": true\n}"
+            },
+            "url": {
+              "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebaseWebApiKey}}",
+              "host": [
+                "https://identitytoolkit.googleapis.com"
+              ],
+              "path": [
+                "v1",
+                "accounts:signInWithPassword"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{firebaseWebApiKey}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Firebase sign-in returns 200', function() { pm.response.to.have.status(200); });",
+                  "var resp = pm.response.json();",
+                  "if (resp.idToken) {",
+                  "  pm.environment.set('idToken', resp.idToken);",
+                  "  console.log('idToken saved to environment (do not export)');",
+                  "} else {",
+                  "  console.log('No idToken in response');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Organization",
+      "item": [
+        {
+          "name": "Create Organization (requires Firebase idToken)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{idToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo Sandbox Org\",\n  \"slug\": \"demo-sandbox-org\",\n  \"country\": \"US\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/organizations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "organizations"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Organization create returns 201', function() { pm.response.to.have.status(201); });",
+                  "var b = pm.response.json();",
+                  "if (b.organizationId) pm.environment.set('organizationId', b.organizationId);",
+                  "// Capture show-once API key if present — store locally and DO NOT export this environment",
+                  "if (b.defaultSandboxKey && b.defaultSandboxKey.secret) {",
+                  "  pm.environment.set('apiKey', b.defaultSandboxKey.secret);",
+                  "  console.log('Captured show-once apiKey (store locally).');",
+                  "} else {",
+                  "  console.log('No show-once apiKey returned. Operator may need to pre-create a demo key.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Customer",
+      "item": [
+        {
+          "name": "Create Customer (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Alice Example\",\n  \"email\": \"alice@example.com\",\n  \"phone\": \"+15555551234\",\n  \"partnerCustomerId\": \"partner-cust-001\",\n  \"walletAddress\": \"0x0000000000000000000000000000000000000000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Customer create returns 201', function() { pm.response.to.have.status(201); });",
+                  "var b = pm.response.json();",
+                  "if (b.customerId) pm.environment.set('customerId', b.customerId);",
+                  "console.log('customerId stored in environment');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Legacy Plan",
+      "item": [
+        {
+          "name": "Create Legacy Plan (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"name\": \"Alice's Inheritance Plan\",\n  \"intervalDays\": 30,\n  \"guardianQuorum\": 1,\n  \"walletSignatureRequired\": false,\n  \"encryptionConfig\": {\n    \"algorithm\": \"AES-256-GCM\",\n    \"kdf\": \"PBKDF2\",\n    \"shamirThreshold\": 2,\n    \"shamirShares\": 3\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/legacy-plans",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "legacy-plans"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Legacy plan create returns 201', function() { pm.response.to.have.status(201); });",
+                  "var b = pm.response.json();",
+                  "if (b.legacyPlanId) pm.environment.set('legacyPlanId', b.legacyPlanId);",
+                  "console.log('legacyPlanId stored in environment');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Guardian",
+      "item": [
+        {
+          "name": "Create Guardian (X-API-Key) - firebase_uid_match example",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Guardian One\",\n  \"email\": \"guardian@example.com\",\n  \"firebaseUid\": \"firebase-guardian-uid-1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/guardians",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "guardians"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Guardian create returns 201', function() { pm.response.to.have.status(201); });",
+                  "var b = pm.response.json();",
+                  "if (b.guardianId) pm.environment.set('guardianId', b.guardianId);",
+                  "console.log('guardianId stored in environment');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 - Liveness",
+      "item": [
+        {
+          "name": "Record Liveness (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"customerId\": \"{{customerId}}\",\n  \"checkedAt\": \"2026-09-16T19:00:00Z\",\n  \"note\": \"Postman quickstart liveness check\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/liveness",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "liveness"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Liveness record returns 201', function() { pm.response.to.have.status(201); });",
+                  "console.log('Liveness recorded');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 - Claims",
+      "item": [
+        {
+          "name": "Create Claim (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"legacyPlanId\": \"{{legacyPlanId}}\",\n  \"reason\": \"Test claim created by Postman quickstart\",\n  \"reportedAt\": \"2026-09-16T19:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/claims",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "claims"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Claim create returns 201', function() { pm.response.to.have.status(201); });",
+                  "var b = pm.response.json();",
+                  "if (b.claimId) pm.environment.set('claimId', b.claimId);",
+                  "console.log('claimId stored in environment');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transition Claim (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"claimId\": \"{{claimId}}\",\n  \"to\": \"guardian_review\",\n  \"reason\": \"Guardian approval test\",\n  \"guardianId\": \"{{guardianId}}\",\n  \"guardianApproved\": true,\n  \"guardianProof\": {\n    \"scheme\": \"firebase_uid_match\",\n    \"nonce\": \"nonce-12345\",\n    \"signedAt\": \"2026-09-16T19:01:00Z\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/claims/transition",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "claims",
+                "transition"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Claim transition returns 200', function() { pm.response.to.have.status(200); });",
+                  "console.log('Claim transitioned (check response status and guardianApprovals)');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 - Webhooks",
+      "item": [
+        {
+          "name": "Create Webhook Endpoint (X-API-Key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/chainlegacy-webhook\",\n  \"events\": [\"claim.created\", \"claim.transitioned\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Webhook create returns 201', function() { pm.response.to.have.status(201); });",
+                  "var b = pm.response.json();",
+                  "if (b.webhookEndpointId) pm.environment.set('webhookEndpointId', b.webhookEndpointId);",
+                  "if (b.secret) { pm.environment.set('webhookSecret', b.secret); console.log('Captured webhook secret (SHOW-ONCE).'); }",
+                  "console.log('Webhook endpoint created');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 - Audit",
+      "item": [
+        {
+          "name": "Query Audit Events (X-API-Key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit?organizationId={{organizationId}}&resourceId={{claimId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit"
+              ],
+              "query": [
+                { "key": "organizationId", "value": "{{organizationId}}" },
+                { "key": "resourceId", "value": "{{claimId}}" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Audit query returns 200', function() { pm.response.to.have.status(200); });",
+                  "console.log('Audit events fetched');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Operator Only",
+      "item": [
+        {
+          "name": "OPERATOR ONLY - Run Cron (GET /api/cron/check-status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{CRON_SECRET}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/check-status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cron",
+                "check-status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cron run returns 200', function() { pm.response.to.have.status(200); });",
+                  "console.log('Operator cron executed');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OPERATOR ONLY - Deliver Webhooks (POST /api/v1/webhooks/deliver)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{CRON_SECRET}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/webhooks/deliver",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "webhooks",
+                "deliver"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Webhook deliver returns 200', function() { pm.response.to.have.status(200); });",
+                  "console.log('Operator delivered webhooks');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create API Key (X-API-Key) - returns show-once secret",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{apiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"demo-client-key\",\n  \"env\": \"sandbox\",\n  \"scopes\": [ \"customers:write\", \"claims:write\" ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/api-keys", "host": ["{{baseUrl}}"], "path": ["api","v1","api-keys"] }
+          },
+          "event": [
+            { "listen": "test", "script": { "exec": [
+              "pm.test('Create API key returns 201', function() { pm.response.to.have.status(201); });",
+              "var b = pm.response.json();",
+              "if (b.secret) { pm.environment.set('apiKey', b.secret); console.log('Captured new show-once apiKey (operator only).'); }"
+            ] } }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": []
+}

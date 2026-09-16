@@ -1,0 +1,29 @@
+{
+  "id": "chainlegacy-sandbox-env",
+  "name": "ChainLegacy Sandbox Environment",
+  "values": [
+    { "key": "baseUrl", "value": "", "enabled": true },
+    { "key": "firebaseWebApiKey", "value": "", "enabled": true },
+    { "key": "firebaseAuthDomain", "value": "chainlegacy-1e56a.firebaseapp.com", "enabled": true },
+    { "key": "firebaseProjectId", "value": "chainlegacy-1e56a", "enabled": true },
+    { "key": "firebaseStorageBucket", "value": "chainlegacy-1e56a.appspot.com", "enabled": true },
+    { "key": "firebaseMessagingSenderId", "value": "525305388170", "enabled": true },
+    { "key": "firebaseAppId", "value": "1:525305388170:web:cfff445f221b6dbdaa86173", "enabled": true },
+    { "key": "firebaseTestUserEmail", "value": "", "enabled": true },
+    { "key": "firebaseTestUserPassword", "value": "", "enabled": true },
+    { "key": "idToken", "value": "", "enabled": true },
+    { "key": "apiKey", "value": "", "enabled": true },
+    { "key": "organizationId", "value": "", "enabled": true },
+    { "key": "customerId", "value": "", "enabled": true },
+    { "key": "legacyPlanId", "value": "", "enabled": true },
+    { "key": "guardianId", "value": "", "enabled": true },
+    { "key": "claimId", "value": "", "enabled": true },
+    { "key": "webhookEndpointId", "value": "", "enabled": true },
+    { "key": "webhookSecret", "value": "", "enabled": true },
+    { "key": "CRON_SECRET", "value": "", "enabled": true }
+  ],
+  "timestamp": 0,
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-09-16T19:00:00.000Z",
+  "_postman_exported_using": "Copilot-Generated"
+}
