@@ -14,7 +14,6 @@ const STRICT_CSP_DIRECTIVES = [
   "frame-src 'self' https://verify.walletconnect.org https://verify.walletconnect.com https://app.kitcoin.xyz https://*.sendwyre.com https://pay.coinbase.com",
   "media-src 'self' blob:",
   "manifest-src 'self'",
-  "prefetch-src 'self'",
 ];
 const SECURITY_HEADERS_BASE: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
@@ -70,7 +69,22 @@ export const middleware: NextMiddleware = (req: NextRequest, _evt) => {
   const { requestId } = extractRequestId(req);
   const nonce = generateNonce();
   const csp = buildCspHeader(nonce);
-  const res = NextResponse.next();
+  const requestHeaders = new Headers();
+  const sourceHeaders = req.headers as Headers & {
+    forEach?: (callback: (value: string, key: string) => void) => void;
+  };
+  if (typeof sourceHeaders.forEach === 'function') {
+    sourceHeaders.forEach((value, key) => requestHeaders.set(key, value));
+  } else {
+    const incomingRequestId = sourceHeaders.get('x-request-id');
+    if (incomingRequestId) requestHeaders.set('x-request-id', incomingRequestId);
+  }
+  requestHeaders.set('x-nonce', nonce);
+  const res = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
   res.headers.set('x-request-id', requestId);
   res.headers.set('x-csp-nonce', nonce);
   res.headers.set('Content-Security-Policy', csp);

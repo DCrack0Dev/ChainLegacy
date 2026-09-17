@@ -3,12 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 describe('vercel.json cron schedule (AC-10, TR-4.1)', () => {
-  it('commits hourly schedule for /api/cron/check-status', () => {
+  it('commits daily schedule for /api/cron/check-status', () => {
     const raw = fs.readFileSync(path.resolve(process.cwd(), 'vercel.json'), 'utf8');
     const parsed = JSON.parse(raw);
     expect(parsed.crons[0]).toEqual({
       path: '/api/cron/check-status',
-      schedule: '0 * * * *',
+      schedule: '0 0 * * *',
     });
   });
 });
