@@ -1,72 +1,53 @@
-import { v1Route, structuredJson } from '@/lib/v1-route';
-import { queryOrgCollection } from '@/services/enterprise/v1-helpers';
+import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { z } from 'zod';
+
 export const dynamic = 'force-dynamic';
 
-export const GET = v1Route({
-  method: 'GET',
-  scope: 'audit:read',
-  requireOrg: true,
-  async handle({ auth, searchParams, pagination }) {
-    const organizationId = auth.organizationId!;
-    const event = searchParams.get('event');
-    const resource = searchParams.get('resource');
-    const actor = searchParams.get('actor');
-    const start = searchParams.get('start');
-    const end = searchParams.get('end');
-    const filters: Array<[string, string, any]> = [];
-    if (event) filters.push(['event', '==', event]);
-    if (resource) filters.push(['resourceType', '==', resource]);
-    if (actor) filters.push(['actor.id', '==', actor]);
-    if (start || end) {
-      const events: any[] = [];
-      if (adminDb) {
-        const snap = await adminDb
-          .collection('organizations').doc(organizationId)
-          .collection('auditEvents')
-          .orderBy('createdAt', 'desc')
-          .limit(500)
-          .get();
-        snap.forEach((d: any) => events.push(d.data()));
-      }
-      const startMs = start ? new Date(start).getTime() : -Infinity;
-      const endMs = end ? new Date(end).getTime() : Infinity;
-      const filtered = events.filter((e: any) => {
-        const ct = typeof e.createdAt?.toDate === 'function' ? e.createdAt.toDate().getTime()
-          : e.createdAt instanceof Date ? e.createdAt.getTime()
-          : typeof e.createdAt === 'number' ? e.createdAt
-          : new Date(e.createdAt ?? 0).getTime();
-        return ct >= startMs && ct <= endMs;
-      });
-      return structuredJson({
-        data: filtered,
-        meta: {
-          organizationId, event, resource, actor, start, end,
-          total: filtered.length,
-          pagination,
-          redacted: true,
-        },
-      });
-    }
-    const { items, total } = await queryOrgCollection(
-      organizationId,
-      'auditEvents',
-      filters,
-      pagination,
-    );
-    return structuredJson({
-      data: items,
-      meta: {
-        organizationId,
-        event,
-        resource,
-        actor,
-        start,
-        end,
-        pagination,
-        total,
-        redacted: true,
-      },
-    });
-  },
+const ListAuditSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+  event: z.string().optional(),
 });
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const parsed = ListAuditSchema.safeParse(Object.fromEntries(searchParams));
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const { limit, offset, event } = parsed.data;
+    const orgId = 'org_legacy_migration';
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    let query = db
+      .collection('organizations').doc(orgId)
+      .collection('auditEvents')
+      .where('organizationId', '==', orgId)
+      .orderBy('createdAt', 'desc');
+
+    if (event) query = query.where('event', '==', event);
+
+    const snap = await query.limit(limit + 1).offset(offset).get();
+    const auditEvents = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const hasMore = auditEvents.length > limit;
+    const items = hasMore ? auditEvents.slice(0, limit) : auditEvents;
+
+    return NextResponse.json({
+      data: items,
+      meta: { limit, offset, hasMore, total: items.length + offset },
+    });
+
+  } catch (error: any) {
+    console.error('[Enterprise Audit List] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

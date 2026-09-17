@@ -1,114 +1,120 @@
-import { v1Route, structuredJson } from '@/lib/v1-route';
-import { ApiError } from '@/lib/api-errors';
-import { Vault, VaultCreateSchema } from '@/types/enterprise';
-import {
-  createVaultForCustomer,
-  getCustomerInOrg,
-  getVaultInOrg,
-  linkVaultToCustomer,
-} from '@/services/enterprise/domain-model';
-import { logV1Event, genId, processWebhookEnqueue, makeWebhookDeliveryEvent } from '@/services/enterprise/v1-helpers';
-import { SystemEvent } from '@/services/events';
+import { NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Canonical 1:1 Customer ↔ Vault endpoint.
- *
- *   POST /api/v1/customers/{customerId}/vault  → create (or return) the customer vault
- *   GET  /api/v1/customers/{customerId}/vault  → inspect the vault link
- *
- * The vault is the container for the protected legacy; every legacy plan for this
- * customer must reference it. Server admin only (Firestore rules deny client writes).
- */
+export async function POST(
+  request: Request,
+  { params }: { params: { customerId: string } }
+) {
+  try {
+    const { customerId } = params;
+    const orgId = 'org_legacy_migration';
+    const body = await request.json();
+    const { name, intervalDays } = body;
 
-async function loadCustomerVault(auth: any, customerId: string) {
-  const organizationId = auth.organizationId as string;
-  const customer = await getCustomerInOrg(organizationId, customerId);
-  if (!customer.vaultId) {
-    // Same 404 contract as other v1 lookups: an unlinked vault does not exist yet.
-    throw new ApiError(404, 'RELATED_RESOURCE_NOT_FOUND', 'Customer has no vault yet', { customerId });
-  }
-  const vault = await getVaultInOrg(organizationId, customer.vaultId);
-  return { customer, vault };
-}
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
 
-export const GET = v1Route({
-  method: 'GET',
-  scope: 'vaults:read',
-  requireOrg: true,
-  async handle({ auth, params, requestId }) {
-    const customerId = params.customerId;
-    if (!customerId) throw new ApiError(400, 'CUSTOMER_ID_MISSING', 'customerId path parameter required');
-    const { customer, vault } = await loadCustomerVault(auth, customerId);
-    return structuredJson({
-      vault,
-      customerId: customer.id,
-      customerVaultId: customer.vaultId,
-      verificationStatus: customer.verificationStatus,
-      requestId,
-    });
-  },
-});
+    // Verify customer exists
+    const customerSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('customers').doc(customerId).get();
 
-export const POST = v1Route({
-  method: 'POST',
-  scope: 'vaults:write',
-  requireOrg: true,
-  bodySchema: VaultCreateSchema.partial(),
-  async handle({ auth, params, body, requestId, idempotencyKey }) {
-    const customerId = params.customerId;
-    if (!customerId) throw new ApiError(400, 'CUSTOMER_ID_MISSING', 'customerId path parameter required');
-    const organizationId = auth.organizationId!;
-    const input = (body ?? {}) as { vaultId?: string; name?: string; intervalDays?: number };
-    let vault: Vault;
-    let customerVaultId: string;
-    let created = false;
-    let linked = false;
-
-    if (input.vaultId) {
-      // Explicit relink of an already-provisioned vault document.
-      const result = await linkVaultToCustomer(organizationId, customerId, input.vaultId);
-      vault = result.vault;
-      customerVaultId = result.customer.vaultId!;
-      linked = true;
-    } else {
-      const result = await createVaultForCustomer(organizationId, customerId, {
-        name: input.name,
-        intervalDays: input.intervalDays,
-      });
-      vault = result.vault;
-      customerVaultId = result.customer.vaultId!;
-      created = result.created;
-      linked = result.created;
+    if (!customerSnap.exists) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
 
-    await logV1Event(auth, created || linked ? SystemEvent.VAULT_CREATED : SystemEvent.VAULT_UPDATED, {
-      vaultId: vault.id,
+    const customer = customerSnap.data()!;
+
+    // Check if customer already has a vault
+    if (customer.vaultId) {
+      const existingVault = await db
+        .collection('organizations').doc(orgId)
+        .collection('vaults').doc(customer.vaultId).get();
+      
+      if (existingVault.exists) {
+        return NextResponse.json({ 
+          vault: { id: existingVault.id, ...existingVault.data() },
+          created: false,
+          message: 'Customer already has a vault'
+        }, { status: 200 });
+      }
+    }
+
+    const vaultId = `vlt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const now = new Date();
+
+    const vault = {
+      id: vaultId,
+      organizationId: orgId,
       customerId,
-      created,
-      linked,
-    }, {
-      requestId,
-      resource: { type: 'vault', id: vault.id },
+      ownerUid: customer.firebaseUid ?? null,
+      name: name ?? 'Primary Legacy Vault',
+      status: 'active',
+      intervalDays: intervalDays ?? 30,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Transaction: create vault + link to customer
+    await db.runTransaction(async (tx) => {
+      tx.set(db.collection('organizations').doc(orgId).collection('vaults').doc(vaultId), vault);
+      tx.update(db.collection('organizations').doc(orgId).collection('customers').doc(customerId), {
+        vaultId,
+        updatedAt: now,
+      });
     });
 
-    const evt = makeWebhookDeliveryEvent(
-      `evt_${genId('').slice(0, 16)}`,
-      created ? 'vault.created' : 'vault.linked',
-      organizationId,
-      { vault, customerId },
-      { idempotencyKey: idempotencyKey ?? undefined, requestId, actor: (auth as any).actorId },
-    );
-    await processWebhookEnqueue(organizationId, evt);
+    return NextResponse.json({ vault, created: true }, { status: 201 });
 
-    return structuredJson({
-      vault,
-      customerId,
-      customerVaultId,
-      created,
-      linked,
-      requestId,
-    }, created ? 201 : 200);
-  },
-});
+  } catch (error: any) {
+    console.error('[Enterprise Vault Create] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: { customerId: string } }
+) {
+  try {
+    const { customerId } = params;
+    const orgId = 'org_legacy_migration';
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    const customerSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('customers').doc(customerId).get();
+
+    if (!customerSnap.exists) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    const customer = customerSnap.data()!;
+
+    if (!customer.vaultId) {
+      return NextResponse.json({ error: 'Customer has no vault' }, { status: 404 });
+    }
+
+    const vaultSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('vaults').doc(customer.vaultId).get();
+
+    if (!vaultSnap.exists) {
+      return NextResponse.json({ error: 'Vault not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ vault: { id: vaultSnap.id, ...vaultSnap.data() } });
+
+  } catch (error: any) {
+    console.error('[Enterprise Vault Get] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

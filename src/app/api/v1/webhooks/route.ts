@@ -1,117 +1,104 @@
-import { v1Route, structuredJson } from '@/lib/v1-route';
-import { WebhookEndpointCreateSchema } from '@/types/enterprise';
-import { FirestorePersistenceBackend } from '@/services/enterprise/persistence';
-import { generateSigningSecret } from '@/services/enterprise/webhook';
-import { SystemEvent } from '@/services/events';
-import { logV1Event, processWebhookEnqueue, makeWebhookDeliveryEvent, genId } from '@/services/enterprise/v1-helpers';
+import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
-const persistence = new FirestorePersistenceBackend();
-
-export const GET = v1Route({
-  method: 'GET',
-  scope: 'webhooks:manage',
-  requireOrg: true,
-  async handle({ auth, searchParams }) {
-    const organizationId = auth.organizationId!;
-    const includeDeliveries = searchParams.get('include') === 'deliveries';
-    const enabledParam = searchParams.get('enabled');
-    const whereFilters: [string, string, any][] = [['organizationId', '==', organizationId]];
-    if (enabledParam !== null && enabledParam !== undefined) {
-      whereFilters.push(['enabled', '==', enabledParam === 'true']);
-    }
-    const allEndpoints = await persistence.list<any>(organizationId, 'webhookEndpoints', {
-      where: whereFilters,
-      orderBy: ['createdAt', 'desc'],
-    });
-    const endpoints = allEndpoints.map(e => ({ ...e }));
-    let deliveriesByEndpoint: Record<string, any[]> = {};
-    if (includeDeliveries && adminDb) {
-      const deliveriesSnap = await adminDb
-        .collection('organizations')
-        .doc(organizationId)
-        .collection('webhookDeliveries')
-        .orderBy('scheduledAt', 'desc')
-        .limit(100)
-        .get();
-      const allDeliveries: any[] = [];
-      deliveriesSnap.forEach((d: any) => allDeliveries.push({ id: d.id, ...d.data() }));
-      for (const ep of endpoints) {
-        deliveriesByEndpoint[ep.id] = allDeliveries.filter((d) => d.endpointId === ep.id).slice(0, 20);
-      }
-    }
-    const data = endpoints.map((ep) => {
-      const { secret, ...rest } = ep;
-      return {
-        ...rest,
-        ...(includeDeliveries ? { recentDeliveries: deliveriesByEndpoint[ep.id] ?? [] } : {}),
-      };
-    });
-    return structuredJson({
-      data,
-      meta: {
-        organizationId,
-        includeDeliveries,
-        total: data.length,
-        enabledFilter: enabledParam,
-        note: 'consecutiveFailures >= threshold auto-disables endpoint',
-      },
-    });
-  },
+const ListWebhooksSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
-export const POST = v1Route({
-  method: 'POST',
-  scope: 'webhooks:manage',
-  requireOrg: true,
-  bodySchema: WebhookEndpointCreateSchema,
-  async handle({ auth, body, requestId }) {
-    const organizationId = auth.organizationId!;
-    const secret = generateSigningSecret();
-    const endpoint = await persistence.createWebhookEndpoint(organizationId, {
-      ...body,
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const parsed = ListWebhooksSchema.safeParse(Object.fromEntries(searchParams));
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const { limit, offset } = parsed.data;
+    const orgId = 'org_legacy_migration';
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    const query = db
+      .collection('organizations').doc(orgId)
+      .collection('webhookEndpoints')
+      .where('organizationId', '==', orgId)
+      .orderBy('createdAt', 'desc');
+
+    const snap = await query.limit(limit + 1).offset(offset).get();
+    const webhooks = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const hasMore = webhooks.length > limit;
+    const items = hasMore ? webhooks.slice(0, limit) : webhooks;
+
+    return NextResponse.json({
+      data: items,
+      meta: { limit, offset, hasMore, total: items.length + offset },
+    });
+
+  } catch (error: any) {
+    console.error('[Enterprise Webhooks List] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+const CreateWebhookSchema = z.object({
+  url: z.string().url(),
+  description: z.string().optional(),
+  events: z.array(z.string()).min(1),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const parsed = CreateWebhookSchema.safeParse(body);
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const orgId = 'org_legacy_migration';
+    const { url, description, events } = parsed.data;
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    const webhookId = `whe_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const secret = require('crypto').randomBytes(32).toString('hex');
+    const now = new Date();
+
+    const webhook = {
+      id: webhookId,
+      organizationId: orgId,
+      url,
+      description,
+      events,
       secret,
-    });
-    await logV1Event(auth, SystemEvent.WEBHOOK_UPDATED, { endpoint: { id: endpoint.id, url: endpoint.url, events: endpoint.events } }, {
-      requestId,
-      resource: { type: 'webhookEndpoint', id: endpoint.id },
-      result: 'success',
-    });
-    const evt = makeWebhookDeliveryEvent(
-      `evt_${genId('').slice(0, 16)}`,
-      'webhook.updated',
-      organizationId,
-      {
-        endpoint: {
-          id: endpoint.id,
-          url: endpoint.url,
-          description: endpoint.description,
-          events: endpoint.events,
-          enabled: endpoint.enabled,
-          signingAlgo: endpoint.signingAlgo,
-          createdAt: endpoint.createdAt,
-        },
-      },
-      { requestId, actor: auth.method === 'api_key' ? auth.keyId : auth.method === 'firebase' ? auth.uid : auth.actorId },
-    );
-    await processWebhookEnqueue(organizationId, evt);
-    return structuredJson({
-      endpoint: {
-        id: endpoint.id,
-        organizationId: endpoint.organizationId,
-        url: endpoint.url,
-        description: endpoint.description,
-        events: endpoint.events,
-        signingAlgo: endpoint.signingAlgo,
-        secret,
-        enabled: endpoint.enabled,
-        consecutiveFailures: endpoint.consecutiveFailures,
-        createdAt: endpoint.createdAt,
-      },
-      audit: 'WEBHOOK_UPDATED',
-      requestId,
-    }, 201);
-  },
-});
+      signingAlgo: 'HMAC-SHA256',
+      enabled: true,
+      consecutiveFailures: 0,
+      disabledAt: null,
+      lastDeliveredAt: null,
+      createdAt: now,
+    };
+
+    await db
+      .collection('organizations').doc(orgId)
+      .collection('webhookEndpoints').doc(webhookId).set(webhook);
+
+    return NextResponse.json({ webhook: { ...webhook, secret } }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('[Enterprise Webhook Create] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

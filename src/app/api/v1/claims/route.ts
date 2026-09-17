@@ -1,126 +1,128 @@
-import { v1Route, structuredJson } from '@/lib/v1-route';
-import { ClaimCreateSchema, ClaimSchema, Claim, ClaimStatus, Customer, LegacyPlan, Vault } from '@/types/enterprise';
-import { assertPlanRelationship } from '@/services/enterprise/domain-model';
-import { SystemEvent } from '@/services/events';
-import {
-  processWebhookEnqueue,
-  makeWebhookDeliveryEvent,
-  writeEntity,
-  queryOrgCollection,
-  logV1Event,
-  genId,
-} from '@/services/enterprise/v1-helpers';
+import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
-import { ApiError } from '@/lib/api-errors';
+import { z } from 'zod';
+
 export const dynamic = 'force-dynamic';
 
-export const GET = v1Route({
-  method: 'GET',
-  scope: 'claims:read',
-  requireOrg: true,
-  async handle({ auth, searchParams, pagination }) {
-    const organizationId = auth.organizationId!;
-    const status = searchParams.get('status');
-    const legacyPlanId = searchParams.get('legacyPlanId');
-    const customerId = searchParams.get('customerId');
-    const filters: Array<[string, string, any]> = [];
-    if (status) filters.push(['status', '==', status]);
-    if (legacyPlanId) filters.push(['legacyPlanId', '==', legacyPlanId]);
-    if (customerId) filters.push(['customerId', '==', customerId]);
-    const { items, total } = await queryOrgCollection<Claim>(
-      organizationId,
-      'claims',
-      filters,
-      pagination,
-    );
-    return structuredJson({
-      data: items,
-      meta: {
-        organizationId,
-        status,
-        legacyPlanId,
-        customerId,
-        pagination,
-        total,
-      },
-    });
-  },
+const ListClaimsSchema = z.object({
+  customerId: z.string().optional(),
+  legacyPlanId: z.string().optional(),
+  status: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
-export const POST = v1Route({
-  method: 'POST',
-  scope: 'claims:manage',
-  requireOrg: true,
-  bodySchema: ClaimCreateSchema,
-  async handle({ auth, body, idempotencyKey, requestId }) {
-    const organizationId = auth.organizationId!;
-    const id = genId('claim');
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const parsed = ListClaimsSchema.safeParse(Object.fromEntries(searchParams));
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const { customerId, legacyPlanId, status, limit, offset } = parsed.data;
+    const orgId = 'org_legacy_migration';
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    let query = db
+      .collection('organizations').doc(orgId)
+      .collection('claims')
+      .where('organizationId', '==', orgId)
+      .orderBy('createdAt', 'desc');
+
+    if (customerId) query = query.where('customerId', '==', customerId);
+    if (legacyPlanId) query = query.where('legacyPlanId', '==', legacyPlanId);
+    if (status) query = query.where('status', '==', status);
+
+    const snap = await query.limit(limit + 1).offset(offset).get();
+    const claims = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const hasMore = claims.length > limit;
+    const items = hasMore ? claims.slice(0, limit) : claims;
+
+    return NextResponse.json({
+      data: items,
+      meta: { limit, offset, hasMore, total: items.length + offset },
+    });
+
+  } catch (error: any) {
+    console.error('[Enterprise Claims List] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+const CreateClaimSchema = z.object({
+  customerId: z.string().min(1),
+  legacyPlanId: z.string().min(1),
+  initiator: z.string().min(1),
+  reason: z.string().optional(),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const parsed = CreateClaimSchema.safeParse(body);
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const orgId = 'org_legacy_migration';
+    const { customerId, legacyPlanId, initiator, reason } = parsed.data;
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    // Verify customer exists
+    const customerSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('customers').doc(customerId).get();
+
+    if (!customerSnap.exists) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Verify legacy plan exists and belongs to customer
+    const planSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('legacyPlans').doc(legacyPlanId).get();
+
+    if (!planSnap.exists || planSnap.data()!.customerId !== customerId) {
+      return NextResponse.json({ error: 'Legacy plan not found or does not belong to customer' }, { status: 404 });
+    }
+
+    const claimId = `claim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = new Date();
-    const claimRaw: any = {
-      id,
-      organizationId,
-      status: ClaimStatus.PENDING,
-      transitions: [],
+
+    const claim = {
+      id: claimId,
+      organizationId: orgId,
+      customerId,
+      legacyPlanId,
+      status: 'pending',
+      initiator,
+      reason,
       guardianApprovals: {},
-      approvalsCount: 0,
-      disputeReason: null,
-      ...body,
+      transitions: [{ from: '', to: 'pending', at: now, actor: initiator }],
       createdAt: now,
       updatedAt: now,
     };
-    const parsed = ClaimSchema.safeParse(claimRaw);
-    if (!parsed.success) {
-      throw new ApiError(400, 'VALIDATION_ERROR', parsed.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; '));
-    }
-    const claim: Claim = parsed.data;
-    if (adminDb) {
-      const planSnap = await adminDb
-        .collection('organizations').doc(organizationId)
-        .collection('legacyPlans').where('id', '==', claim.legacyPlanId).limit(1)
-        .get();
-      if (planSnap.empty) throw new ApiError(404, 'LEGACY_PLAN_NOT_FOUND', `legacyPlanId ${claim.legacyPlanId} not found under this organization`);
-      const custSnap = await adminDb
-        .collection('organizations').doc(organizationId)
-        .collection('customers').where('id', '==', claim.customerId).limit(1)
-        .get();
-      if (custSnap.empty) throw new ApiError(404, 'CUSTOMER_NOT_FOUND', `customerId ${claim.customerId} not found under this organization`);
-      // Canonical chain: Claim → Legacy Plan → Vault → Customer (all in one organization).
-      const plan = { id: planSnap.docs[0].id, ...planSnap.docs[0].data() } as LegacyPlan;
-      const customer = { id: custSnap.docs[0].id, ...custSnap.docs[0].data() } as Customer;
-      if (plan.vaultId) {
-        const vaultSnap = await adminDb
-          .collection('organizations').doc(organizationId)
-          .collection('vaults').doc(plan.vaultId).get();
-        const vault = vaultSnap.exists ? ({ id: vaultSnap.id, ...vaultSnap.data() } as Vault) : null;
-        assertPlanRelationship(plan, customer, vault);
-      } else {
-        assertPlanRelationship(plan, customer);
-      }
-    }
-    await writeEntity({
-      collectionSuffix: 'claims',
-      entity: claim,
-      organizationId,
-      entityId: id,
-    });
-    await logV1Event(auth, SystemEvent.CLAIM_INITIATED, { claim }, {
-      requestId,
-      resource: { type: 'claim', id },
-    });
-    const evt = makeWebhookDeliveryEvent(
-      `evt_${genId('').slice(0, 16)}`,
-      'claim.created',
-      organizationId,
-      { claim },
-      { idempotencyKey: idempotencyKey ?? undefined, requestId, actor: (auth as any).actorId },
-    );
-    await processWebhookEnqueue(organizationId, evt);
-    return structuredJson({
-      claim,
-      idempotencyKey,
-      webhookEvent: 'claim.created',
-      audit: 'CLAIM_INITIATED',
-      requestId,
-    }, 201);
-  },
-});
+
+    await db
+      .collection('organizations').doc(orgId)
+      .collection('claims').doc(claimId).set(claim);
+
+    return NextResponse.json({ claim }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('[Enterprise Claim Create] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

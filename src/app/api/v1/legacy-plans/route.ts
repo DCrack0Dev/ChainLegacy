@@ -1,113 +1,145 @@
-import { v1Route, structuredJson } from '@/lib/v1-route';
-import { LegacyPlanCreateSchema, LegacyPlan } from '@/types/enterprise';
-import { ApiError } from '@/lib/api-errors';
-import {
-  DOMAIN_ERROR_CODES,
-  assertPlanRelationship,
-  assertVaultBelongsToCustomer,
-  getCustomerInOrg,
-  getVaultInOrg,
-} from '@/services/enterprise/domain-model';
-import { SystemEvent } from '@/services/events';
-import {
-  processWebhookEnqueue,
-  makeWebhookDeliveryEvent,
-  writeEntity,
-  queryOrgCollection,
-  logV1Event,
-  genId,
-} from '@/services/enterprise/v1-helpers';
+import { NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase-admin';
+import { z } from 'zod';
+
 export const dynamic = 'force-dynamic';
 
-export const GET = v1Route({
-  method: 'GET',
-  scope: 'legacy_plans:read',
-  requireOrg: true,
-  async handle({ auth, searchParams, pagination }) {
-    const organizationId = auth.organizationId!;
-    const customerId = searchParams.get('customerId');
-    const filters: Array<[string, string, any]> = [];
-    if (customerId) filters.push(['customerId', '==', customerId]);
-    const { items, total } = await queryOrgCollection<LegacyPlan>(
-      organizationId,
-      'legacyPlans',
-      filters,
-      pagination,
-    );
-    return structuredJson({
-      data: items,
-      meta: { organizationId, customerId, pagination, total },
-    });
-  },
+const ListPlansSchema = z.object({
+  customerId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
-export const POST = v1Route({
-  method: 'POST',
-  scope: 'legacy_plans:write',
-  requireOrg: true,
-  bodySchema: LegacyPlanCreateSchema,
-  async handle({ auth, body, requestId, idempotencyKey }) {
-    const organizationId = auth.organizationId!;
-    const id = genId('plan');
-    const input = body as any;
-    const customerId = input.customerId;
-    if (!customerId) {
-      throw new ApiError(400, 'RELATIONSHIP_REQUIRED', 'customerId is required: a legacy plan belongs to a customer');
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const parsed = ListPlansSchema.safeParse(Object.fromEntries(searchParams));
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query', details: parsed.error.format() }, { status: 400 });
     }
-    // Canonical chain: Customer → Vault → Legacy Plan. A plan arranges exactly one vault.
-    const customer = await getCustomerInOrg(organizationId, customerId).catch((err) => {
-      if (err instanceof ApiError) throw err;
-      throw new ApiError(500, 'INTERNAL', 'Failed to load customer');
-    });
-    const vaultId = input.vaultId ?? customer.vaultId ?? null;
-    if (!vaultId) {
-      throw new ApiError(
-        400,
-        DOMAIN_ERROR_CODES.RELATIONSHIP_REQUIRED,
-        'Customer has no vault yet: create the vault (POST /api/v1/customers/{customerId}/vault) before its legacy plan',
-        { customerId },
-      );
-    }
-    const vault = await getVaultInOrg(organizationId, vaultId);
-    assertVaultBelongsToCustomer(vault, customer);
 
+    const { customerId, limit, offset } = parsed.data;
+    const orgId = 'org_legacy_migration';
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    let query = db
+      .collection('organizations').doc(orgId)
+      .collection('legacyPlans')
+      .where('organizationId', '==', orgId)
+      .orderBy('createdAt', 'desc');
+
+    if (customerId) query = query.where('customerId', '==', customerId);
+
+    const snap = await query.limit(limit + 1).offset(offset).get();
+    const plans = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const hasMore = plans.length > limit;
+    const items = hasMore ? plans.slice(0, limit) : plans;
+
+    return NextResponse.json({
+      data: items,
+      meta: { limit, offset, hasMore, total: items.length + offset },
+    });
+
+  } catch (error: any) {
+    console.error('[Enterprise Legacy Plans List] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+const CreatePlanSchema = z.object({
+  customerId: z.string().min(1),
+  vaultId: z.string().optional(),
+  name: z.string().min(1).default('Legacy Plan'),
+  intervalDays: z.coerce.number().int().min(1).max(365).default(30),
+  guardianQuorum: z.coerce.number().int().min(0).max(10).default(0),
+  walletSignatureRequired: z.boolean().default(false),
+  encryptionConfig: z.object({
+    algorithm: z.literal('AES-256-GCM').default('AES-256-GCM'),
+    kdf: z.string().default('argon2id'),
+    shamirThreshold: z.number().int().min(0).default(0),
+    shamirShares: z.number().int().min(0).default(0),
+  }).default({ algorithm: 'AES-256-GCM', kdf: 'argon2id', shamirThreshold: 0, shamirShares: 0 }),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const parsed = CreatePlanSchema.safeParse(body);
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const orgId = 'org_legacy_migration';
+    const { customerId, vaultId, name, intervalDays, guardianQuorum, walletSignatureRequired, encryptionConfig } = parsed.data;
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    // Verify customer exists
+    const customerSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('customers').doc(customerId).get();
+
+    if (!customerSnap.exists) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    const customer = customerSnap.data()!;
+
+    // Determine vaultId
+    let finalVaultId = vaultId;
+    if (!finalVaultId) {
+      finalVaultId = customer.vaultId;
+    }
+    if (!finalVaultId) {
+      return NextResponse.json({ error: 'Customer has no vault. Create vault first or provide vaultId.' }, { status: 400 });
+    }
+
+    // Verify vault exists and belongs to customer
+    const vaultSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('vaults').doc(finalVaultId).get();
+
+    if (!vaultSnap.exists || vaultSnap.data()!.customerId !== customerId) {
+      return NextResponse.json({ error: 'Vault not found or does not belong to customer' }, { status: 404 });
+    }
+
+    const planId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = new Date();
-    const plan: LegacyPlan = {
-      id,
-      organizationId,
+
+    const plan = {
+      id: planId,
+      organizationId: orgId,
       customerId,
-      vaultId,
+      vaultId: finalVaultId,
+      name,
+      intervalDays,
+      guardianQuorum,
+      walletSignatureRequired,
+      encryptionConfig,
       status: 'draft',
-      lastCheckInAt: undefined,
-      nextEscalationAt: undefined,
       suspicionScore: 0,
-      ...input,
       createdAt: now,
       updatedAt: now,
-    } as LegacyPlan;
-    assertPlanRelationship(plan, customer, vault);
-    await writeEntity({
-      collectionSuffix: 'legacyPlans',
-      entity: plan,
-      organizationId,
-      entityId: id,
-    });
-    await logV1Event(auth, SystemEvent.LEGACY_PLAN_CREATED, { plan }, {
-      requestId,
-      resource: { type: 'legacyPlan', id },
-    });
-    const evt = makeWebhookDeliveryEvent(
-      `evt_${genId('').slice(0, 16)}`,
-      'legacy_plan.created',
-      organizationId,
-      { plan },
-      { idempotencyKey: idempotencyKey ?? undefined, requestId, actor: (auth as any).actorId },
-    );
-    await processWebhookEnqueue(organizationId, evt);
-    return structuredJson({
-      plan,
-      webhookEvent: 'legacy_plan.created',
-      requestId,
-    }, 201);
-  },
-});
+    };
+
+    await db
+      .collection('organizations').doc(orgId)
+      .collection('legacyPlans').doc(planId).set(plan);
+
+    return NextResponse.json({ plan }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('[Enterprise Legacy Plan Create] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

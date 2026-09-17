@@ -1,107 +1,146 @@
-import { v1Route, structuredJson } from '@/lib/v1-route';
-import { BeneficiaryCreateSchema, Beneficiary } from '@/types/enterprise';
-import { ApiError } from '@/lib/api-errors';
-import {
-  assertPlanRelationship,
-  assertVaultBelongsToCustomer,
-  getCustomerInOrg,
-  getLegacyPlanInOrg,
-  getVaultInOrg,
-} from '@/services/enterprise/domain-model';
-import { SystemEvent } from '@/services/events';
-import {
-  processWebhookEnqueue,
-  makeWebhookDeliveryEvent,
-  writeEntity,
-  queryOrgCollection,
-  logV1Event,
-  genId,
-  assertBeneficiarySharesNotOverflow,
-} from '@/services/enterprise/v1-helpers';
+import { NextResponse } from 'next/server';
+import { adminDb } from '@/lib/firebase-admin';
+import { z } from 'zod';
+
 export const dynamic = 'force-dynamic';
 
-export const GET = v1Route({
-  method: 'GET',
-  scope: 'beneficiaries:read',
-  requireOrg: true,
-  async handle({ auth, searchParams, pagination }) {
-    const organizationId = auth.organizationId!;
-    const customerId = searchParams.get('customerId');
-    const legacyPlanId = searchParams.get('legacyPlanId');
-    const filters: Array<[string, string, any]> = [];
-    if (customerId) filters.push(['customerId', '==', customerId]);
-    if (legacyPlanId) filters.push(['legacyPlanId', '==', legacyPlanId]);
-    const { items, total } = await queryOrgCollection<Beneficiary>(
-      organizationId,
-      'beneficiaries',
-      filters,
-      pagination,
-    );
-    return structuredJson({
-      data: items,
-      meta: { organizationId, customerId, legacyPlanId, pagination, total, note: 'Enumerates customers inside organizationId only; no collectionGroup' },
-    });
-  },
+const ListBeneficiariesSchema = z.object({
+  customerId: z.string().optional(),
+  legacyPlanId: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
-export const POST = v1Route({
-  method: 'POST',
-  scope: 'beneficiaries:write',
-  requireOrg: true,
-  bodySchema: BeneficiaryCreateSchema,
-  async handle({ auth, body, requestId, idempotencyKey }) {
-    const organizationId = auth.organizationId!;
-    const b = body as any;
-    if (!b.customerId) throw new ApiError(400, 'VALIDATION_ERROR', 'customerId required');
-    // Canonical chain: Beneficiary → Customer → Vault → Legacy Plan.
-    const customer = await getCustomerInOrg(organizationId, b.customerId);
-    if (b.legacyPlanId) {
-      const plan = await getLegacyPlanInOrg(organizationId, b.legacyPlanId);
-      assertPlanRelationship(plan, customer);
-      if (customer.vaultId) {
-        const vault = await getVaultInOrg(organizationId, customer.vaultId);
-        assertVaultBelongsToCustomer(vault, customer);
-        assertPlanRelationship(plan, customer, vault);
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const parsed = ListBeneficiariesSchema.safeParse(Object.fromEntries(searchParams));
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const { customerId, legacyPlanId, limit, offset } = parsed.data;
+    const orgId = 'org_legacy_migration';
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    let query = db
+      .collection('organizations').doc(orgId)
+      .collection('beneficiaries')
+      .where('organizationId', '==', orgId)
+      .orderBy('createdAt', 'desc');
+
+    if (customerId) query = query.where('customerId', '==', customerId);
+    if (legacyPlanId) query = query.where('legacyPlanId', '==', legacyPlanId);
+
+    const snap = await query.limit(limit + 1).offset(offset).get();
+    const beneficiaries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    const hasMore = beneficiaries.length > limit;
+    const items = hasMore ? beneficiaries.slice(0, limit) : beneficiaries;
+
+    return NextResponse.json({
+      data: items,
+      meta: { limit, offset, hasMore, total: items.length + offset },
+    });
+
+  } catch (error: any) {
+    console.error('[Enterprise Beneficiaries List] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+const CreateBeneficiarySchema = z.object({
+  customerId: z.string().min(1),
+  legacyPlanId: z.string().optional(),
+  name: z.string().min(1),
+  email: z.string().email(),
+  phone: z.string().optional(),
+  walletAddress: z.string().optional(),
+  share: z.number().int().min(1).max(100).default(100),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const parsed = CreateBeneficiarySchema.safeParse(body);
+    
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload', details: parsed.error.format() }, { status: 400 });
+    }
+
+    const orgId = 'org_legacy_migration';
+    const { customerId, legacyPlanId, name, email, phone, walletAddress, share } = parsed.data;
+
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
+    }
+    const db = adminDb;
+
+    // Verify customer exists
+    const customerSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('customers').doc(customerId).get();
+
+    if (!customerSnap.exists) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // If legacyPlanId provided, verify it belongs to customer
+    if (legacyPlanId) {
+      const planSnap = await db
+        .collection('organizations').doc(orgId)
+        .collection('legacyPlans').doc(legacyPlanId).get();
+
+      if (!planSnap.exists || planSnap.data()!.customerId !== customerId) {
+        return NextResponse.json({ error: 'Legacy plan not found or does not belong to customer' }, { status: 404 });
       }
     }
-    await assertBeneficiarySharesNotOverflow(
-      organizationId,
-      b.customerId,
-      b.legacyPlanId ?? null,
-      Number(b.share ?? 0),
-    );
-    const id = genId('ben');
+
+    // Check share total doesn't exceed 100
+    const existingSnap = await db
+      .collection('organizations').doc(orgId)
+      .collection('beneficiaries')
+      .where('customerId', '==', customerId)
+      .get();
+
+    let totalShare = share;
+    existingSnap.docs.forEach(doc => {
+      totalShare += doc.data().share || 0;
+    });
+    if (totalShare > 100) {
+      return NextResponse.json({ error: `Total beneficiary shares would exceed 100% (current: ${totalShare - share}%, adding: ${share}%)` }, { status: 400 });
+    }
+
+    const beneficiaryId = `ben_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = new Date();
-    const beneficiary: Beneficiary = {
-      id,
-      organizationId,
-      ...body,
+
+    const beneficiary = {
+      id: beneficiaryId,
+      organizationId: orgId,
+      customerId,
+      legacyPlanId: legacyPlanId ?? null,
+      name,
+      email,
+      phone,
+      walletAddress,
+      share,
       createdAt: now,
       updatedAt: now,
-    } as Beneficiary;
-    await writeEntity({
-      collectionSuffix: 'beneficiaries',
-      entity: beneficiary,
-      organizationId,
-      entityId: id,
-    });
-    await logV1Event(auth, SystemEvent.BENEFICIARY_ADDED, { beneficiary }, {
-      requestId,
-      resource: { type: 'beneficiary', id },
-    });
-    const evt = makeWebhookDeliveryEvent(
-      `evt_${genId('').slice(0, 16)}`,
-      'beneficiary.added',
-      organizationId,
-      { beneficiary },
-      { idempotencyKey: idempotencyKey ?? undefined, requestId, actor: (auth as any).actorId },
-    );
-    await processWebhookEnqueue(organizationId, evt);
-    return structuredJson({
-      beneficiary,
-      note: 'POST asserts customerId exists under organization customers before write.',
-      idempotencyKey,
-      requestId,
-    }, 201);
-  },
-});
+    };
+
+    await db
+      .collection('organizations').doc(orgId)
+      .collection('beneficiaries').doc(beneficiaryId).set(beneficiary);
+
+    return NextResponse.json({ beneficiary }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('[Enterprise Beneficiary Create] Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
