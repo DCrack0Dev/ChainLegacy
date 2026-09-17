@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, Download, FileText, Filter, ChevronDown, ChevronUp, Shield, Key, Users, Bell, Globe, Database, Settings, CreditCard, Lock, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';

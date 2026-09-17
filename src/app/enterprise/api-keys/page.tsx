@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { Plus, Search, Loader2, AlertCircle, CheckCircle2, Edit2, Trash2, Key, Copy, Eye, EyeOff, Shield, AlertTriangle } from 'lucide-react';
 import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';
