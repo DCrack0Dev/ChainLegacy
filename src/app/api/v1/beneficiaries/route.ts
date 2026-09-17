@@ -1,6 +1,13 @@
 import { v1Route, structuredJson } from '@/lib/v1-route';
 import { BeneficiaryCreateSchema, Beneficiary } from '@/types/enterprise';
 import { ApiError } from '@/lib/api-errors';
+import {
+  assertPlanRelationship,
+  assertVaultBelongsToCustomer,
+  getCustomerInOrg,
+  getLegacyPlanInOrg,
+  getVaultInOrg,
+} from '@/services/enterprise/domain-model';
 import { SystemEvent } from '@/services/events';
 import {
   processWebhookEnqueue,
@@ -46,6 +53,17 @@ export const POST = v1Route({
     const organizationId = auth.organizationId!;
     const b = body as any;
     if (!b.customerId) throw new ApiError(400, 'VALIDATION_ERROR', 'customerId required');
+    // Canonical chain: Beneficiary → Customer → Vault → Legacy Plan.
+    const customer = await getCustomerInOrg(organizationId, b.customerId);
+    if (b.legacyPlanId) {
+      const plan = await getLegacyPlanInOrg(organizationId, b.legacyPlanId);
+      assertPlanRelationship(plan, customer);
+      if (customer.vaultId) {
+        const vault = await getVaultInOrg(organizationId, customer.vaultId);
+        assertVaultBelongsToCustomer(vault, customer);
+        assertPlanRelationship(plan, customer, vault);
+      }
+    }
     await assertBeneficiarySharesNotOverflow(
       organizationId,
       b.customerId,

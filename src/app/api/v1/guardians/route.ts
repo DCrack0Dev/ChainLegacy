@@ -1,5 +1,6 @@
 import { v1Route, structuredJson } from '@/lib/v1-route';
 import { GuardianCreateSchema, Guardian } from '@/types/enterprise';
+import { getCustomerInOrg } from '@/services/enterprise/domain-model';
 import { SystemEvent } from '@/services/events';
 import {
   processWebhookEnqueue,
@@ -41,6 +42,13 @@ export const POST = v1Route({
   async handle({ auth, body, requestId, idempotencyKey }) {
     const organizationId = auth.organizationId!;
     const id = genId('g');
+    const gb = body as any;
+    // Canonical chain: Guardian → (optional) Customer inside the same organization.
+    // Guardians are keyed by their own id (guard_*) and may additionally carry a
+    // firebaseUid/walletAddress identity used later for claim approval proofs.
+    if (gb.customerId) {
+      await getCustomerInOrg(organizationId, gb.customerId);
+    }
     const now = new Date();
     const guardian: Guardian = {
       id,

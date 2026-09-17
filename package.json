@@ -6,6 +6,7 @@
     "dev": "next dev",
     "cron:local": "ts-node src/scripts/run-cron.ts",
     "cron:watch": "ts-node src/scripts/run-cron.ts --watch",
+    "migrate:consumer": "ts-node src/scripts/migrate-consumer-to-enterprise.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

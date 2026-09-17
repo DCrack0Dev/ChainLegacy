@@ -1,5 +1,6 @@
 import { v1Route, structuredJson } from '@/lib/v1-route';
-import { ClaimCreateSchema, ClaimSchema, Claim, ClaimStatus } from '@/types/enterprise';
+import { ClaimCreateSchema, ClaimSchema, Claim, ClaimStatus, Customer, LegacyPlan, Vault } from '@/types/enterprise';
+import { assertPlanRelationship } from '@/services/enterprise/domain-model';
 import { SystemEvent } from '@/services/events';
 import {
   processWebhookEnqueue,
@@ -83,6 +84,18 @@ export const POST = v1Route({
         .collection('customers').where('id', '==', claim.customerId).limit(1)
         .get();
       if (custSnap.empty) throw new ApiError(404, 'CUSTOMER_NOT_FOUND', `customerId ${claim.customerId} not found under this organization`);
+      // Canonical chain: Claim → Legacy Plan → Vault → Customer (all in one organization).
+      const plan = { id: planSnap.docs[0].id, ...planSnap.docs[0].data() } as LegacyPlan;
+      const customer = { id: custSnap.docs[0].id, ...custSnap.docs[0].data() } as Customer;
+      if (plan.vaultId) {
+        const vaultSnap = await adminDb
+          .collection('organizations').doc(organizationId)
+          .collection('vaults').doc(plan.vaultId).get();
+        const vault = vaultSnap.exists ? ({ id: vaultSnap.id, ...vaultSnap.data() } as Vault) : null;
+        assertPlanRelationship(plan, customer, vault);
+      } else {
+        assertPlanRelationship(plan, customer);
+      }
     }
     await writeEntity({
       collectionSuffix: 'claims',

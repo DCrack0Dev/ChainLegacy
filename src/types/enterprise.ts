@@ -51,6 +51,8 @@ export type WebhookEvent = (typeof WebhookEvent)[keyof typeof WebhookEvent];
 export const API_SCOPES = [
   'customers:read',
   'customers:write',
+  'vaults:read',
+  'vaults:write',
   'legacy_plans:read',
   'legacy_plans:write',
   'beneficiaries:read',
@@ -78,6 +80,41 @@ export const PaginationParamsSchema = z.object({
 });
 export type PaginationParams = z.input<typeof PaginationParamsSchema>;
 
+/**
+ * Server-owned identity verification status.
+ *
+ * The browser must never decide that a claimant is verified: only the server
+ * (today the mock verification provider, later a production provider) may move
+ * a customer into `verified`. See `assertIdentityVerificationTransition`.
+ */
+export const IdentityVerificationStatus = {
+  NOT_STARTED: 'not_started',
+  PENDING: 'pending',
+  VERIFIED: 'verified',
+  REJECTED: 'rejected',
+  MANUAL_REVIEW: 'manual_review',
+} as const;
+export type IdentityVerificationStatus = (typeof IdentityVerificationStatus)[keyof typeof IdentityVerificationStatus];
+
+export const VaultStatus = {
+  ACTIVE: 'active',
+  WARNING: 'warning',
+  GRACE: 'grace',
+  TRIGGERED: 'triggered',
+  CLOSED: 'closed',
+} as const;
+export type VaultStatus = (typeof VaultStatus)[keyof typeof VaultStatus];
+
+/**
+ * Canonical enterprise domain model:
+ *
+ *   Firebase Auth UID → Customer → Vault → Legacy Plan → Beneficiaries/Guardians → Claims
+ *
+ * The Firebase UID identifies the authenticated *person*; the Customer identifies
+ * the enterprise-domain *customer*; the Vault contains the protected legacy; the
+ * Legacy Plan defines the legacy arrangement. `users/{uid}` is therefore never the
+ * long-term enterprise domain model — `firebaseUid` is only a link on the Customer.
+ */
 export const CustomerSchema = z.object({
   id: z.string().min(1),
   organizationId: z.string().min(1),
@@ -86,12 +123,48 @@ export const CustomerSchema = z.object({
   fullName: z.string().min(1),
   phone: z.string().optional(),
   walletAddress: z.string().optional(),
+  /** Link to the authenticated person (Firebase Auth). Never the domain identity itself. */
+  firebaseUid: z.string().min(1).nullish(),
+  /** Canonical 1:1 link to this customer's vault. */
+  vaultId: z.string().min(1).nullish(),
+  /** Server-owned verification status. Defaults to `not_started` when written by the server. */
+  verificationStatus: z.nativeEnum(IdentityVerificationStatus).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
 export type Customer = z.infer<typeof CustomerSchema>;
-export const CustomerCreateSchema = CustomerSchema.omit({ id: true, organizationId: true, createdAt: true, updatedAt: true });
+export const CustomerCreateSchema = CustomerSchema.omit({ id: true, organizationId: true, verificationStatus: true, createdAt: true, updatedAt: true });
 export type CustomerCreate = z.infer<typeof CustomerCreateSchema>;
+
+/**
+ * Vault — the protected legacy container. Belongs to exactly one Customer inside
+ * one Organization, and mirrors `ownerUid` for cheap ownership checks.
+ */
+export const VaultSchema = z.object({
+  id: z.string().min(1),
+  organizationId: z.string().min(1),
+  customerId: z.string().min(1),
+  /** Mirrors `Customer.firebaseUid` so vault ownership can be checked without a join. */
+  ownerUid: z.string().min(1).nullish(),
+  name: z.string().min(1).optional(),
+  status: z.nativeEnum(VaultStatus).default(VaultStatus.ACTIVE),
+  lastCheckInAt: z.coerce.date().optional(),
+  intervalDays: z.number().int().min(1).default(30),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type Vault = z.infer<typeof VaultSchema>;
+export const VaultCreateSchema = VaultSchema.omit({
+  id: true,
+  organizationId: true,
+  customerId: true,
+  ownerUid: true,
+  status: true,
+  lastCheckInAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type VaultCreate = z.input<typeof VaultCreateSchema>;
 
 export const BeneficiarySchema = z.object({
   id: z.string().min(1),
@@ -136,6 +209,8 @@ export const LegacyPlanSchema = z.object({
   id: z.string().min(1),
   organizationId: z.string().min(1),
   customerId: z.string().min(1),
+  /** Canonical link: a plan always arranges the legacy held in exactly one vault. */
+  vaultId: z.string().min(1).nullish(),
   name: z.string().min(1),
   intervalDays: z.number().int().min(1).default(30),
   guardianQuorum: z.number().int().min(0).default(0),

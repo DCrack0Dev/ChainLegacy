@@ -22,12 +22,14 @@ import {
   ApiKeyEnv,
   OrganizationStatus,
   ClaimStatus,
+  IdentityVerificationStatus,
 } from '@/types/enterprise';
 import { generateSigningSecret } from '@/services/enterprise/webhook';
 
 export const ID_PREFIXES = {
   org: 'org_',
   customer: 'cust_',
+  vault: 'vlt_',
   legacyPlan: 'plan_',
   beneficiary: 'ben_',
   guardian: 'guard_',
@@ -248,6 +250,9 @@ export class FirestorePersistenceBackend implements PersistenceBackend {
     const payload: Omit<Customer, 'id'> = {
       organizationId: orgId,
       ...data,
+      // Server-owned: new customers always start unverified.
+      verificationStatus: IdentityVerificationStatus.NOT_STARTED,
+      vaultId: null,
       createdAt: now,
       updatedAt: now,
     };

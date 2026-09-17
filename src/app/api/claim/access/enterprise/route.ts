@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb, FieldValue } from '@/lib/firebase-admin';
+import { cache } from '@/lib/cache';
 import { z } from 'zod';
 import { authorizeClaim, validateClaimForAuthorization, requireIdentityVerifiedForClaim, verifyOtpForClaim, checkGuardianQuorum, getNextRequiredAction, transitionClaimToVerification } from '@/services/enterprise/claim-authorization';
 import { getCustomerInOrg, getVaultInOrg, getLegacyPlanInOrg, assertPlanRelationship } from '@/services/enterprise/domain-model';
 import { ApiError } from '@/lib/api-errors';
+import { IdentityVerificationStatus } from '@/types/enterprise';
 
 export const dynamic = 'force-dynamic';
 
@@ -215,7 +217,7 @@ export async function POST(request: Request) {
 
         await userDoc.ref.update({
           claimAttempts: 0,
-          lastClaimAttemptAt: undefined,
+          lastClaimAttemptAt: FieldValue.delete(),
         });
 
         const authResult = await authorizeClaim(context, true, false);

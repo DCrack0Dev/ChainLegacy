@@ -60,7 +60,7 @@ Prefix rules:
 - `clsbox_` = sandbox. Usepilot-sandbox only. Not accepted on production.
 - `clprod_` = production. Not issued after enterprise contract signing.
 
-Scope list: `customers:read`, `customers:write`, `legacy_plans:read`, `legacy_plans:write`, `beneficiaries:read`, `beneficiaries:write`, `guardians:read`, `guardians:write`, `liveness:read`, `liveness:write`, `claims:read`, `claims:manage`, `webhooks:manage`, `audit:read`, `api_keys:read`, `api_keys:write`.
+Scope list: `customers:read`, `customers:write`, `vaults:read`, `vaults:write`, `legacy_plans:read`, `legacy_plans:write`, `beneficiaries:read`, `beneficiaries:write`, `guardians:read`, `guardians:write`, `liveness:read`, `liveness:write`, `claims:read`, `claims:manage`, `webhooks:manage`, `audit:read`, `api_keys:read`, `api_keys:write`.
 
 ---
 
@@ -97,6 +97,42 @@ curl -X POST https://SANDBOX_BASE/api/v1/customers \
 ```
 
 Returns customer object with `id: cust_...`. Customer is the main identity object you map your partnerCustomerId against.
+
+### 4.1 Canonical domain model (identifier rules)
+
+```
+Firebase Auth UID  →  Customer  →  Vault  →  Legacy Plan  →  Beneficiaries / Guardians  →  Claims
+```
+
+- `firebaseUid` identifies the authenticated **person**; `Customer.id` (`cust_...`) identifies the
+  enterprise-domain **customer**. Never use a Firebase UID as a customer id (409
+  `RELATIONSHIP_CONFLICT`).
+- `Customer.vaultId` ↔ `Vault.customerId` is a 1:1 link created server-side, in one transaction.
+- Every legacy plan references exactly one vault; the vault must belong to the same customer.
+- `verificationStatus` (`not_started` | `pending` | `verified` | `rejected` | `manual_review`) is
+  **server-owned**. A client can only start/restart a check; a client request that tries to set an
+  outcome is rejected with 403 `VERIFICATION_TRANSITION_ILLEGAL`.
+
+### 4.2 Create / read the customer vault
+
+```
+POST /api/v1/customers/{customerId}/vault
+  scope: vaults:write
+  body: { "name": "Primary legacy", "intervalDays": 30 }   # or { "vaultId": "vlt_xxx" } to relink
+  → 201 { vault, customerId, customerVaultId, created: true, linked: true }
+
+GET  /api/v1/customers/{customerId}/vault
+  scope: vaults:read
+  → 200 { vault, customerId, customerVaultId, verificationStatus }
+
+GET  /api/v1/vaults?customerId=&ownerUid=&status=
+  scope: vaults:read
+  → { data: [...], meta: { pagination, total } }
+```
+
+`POST /api/v1/legacy-plans` now requires the customer to have a vault; a plan for a customer
+without one returns 400 `RELATIONSHIP_REQUIRED`.
+
 
 ---
 

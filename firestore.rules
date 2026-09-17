@@ -33,6 +33,8 @@ service cloud.firestore {
     match /organizations/{orgId} {
       allow read, write: if false;
       match /customers/{customerId} { allow read, write: if false; }
+      // Canonical Customer -> Vault container. Server admin SDK only.
+      match /vaults/{vaultId} { allow read, write: if false; }
       match /legacyPlans/{planId} { allow read, write: if false; }
       match /beneficiaries/{benId} { allow read, write: if false; }
       match /guardians/{guardId} { allow read, write: if false; }

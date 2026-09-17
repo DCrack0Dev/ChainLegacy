@@ -8,7 +8,7 @@ import {
 
 export const CLAIM_LEGAL_TRANSITIONS: Record<ClaimStatus, ClaimStatus[]> = {
   [ClaimStatus.PENDING]: [ClaimStatus.VERIFICATION, ClaimStatus.CANCELLED],
-  [ClaimStatus.VERIFICATION]: [ClaimStatus.GUARDIAN_REVIEW, ClaimStatus.REJECTED, ClaimStatus.CANCELLED],
+  [ClaimStatus.VERIFICATION]: [ClaimStatus.GUARDIAN_REVIEW, ClaimStatus.GRACE_PERIOD, ClaimStatus.REJECTED, ClaimStatus.CANCELLED],
   [ClaimStatus.GUARDIAN_REVIEW]: [ClaimStatus.GRACE_PERIOD, ClaimStatus.REJECTED, ClaimStatus.DISPUTED, ClaimStatus.CANCELLED],
   [ClaimStatus.GRACE_PERIOD]: [ClaimStatus.APPROVED, ClaimStatus.REJECTED, ClaimStatus.DISPUTED, ClaimStatus.CANCELLED],
   [ClaimStatus.APPROVED]: [ClaimStatus.COMPLETED, ClaimStatus.DISPUTED, ClaimStatus.CANCELLED],
