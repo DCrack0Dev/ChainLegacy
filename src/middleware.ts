@@ -5,7 +5,7 @@ const STRICT_CSP_DIRECTIVES = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://www.googleapis.com https://cloudflareinsights.com https://*.walletconnect.com wss://relay.walletconnect.com https://api.coinbase.com https://metamask-sdk.api.cx.metamask.io https://rpc.walletconnect.com",
+  "connect-src 'self' https://*.firebaseio.com https://firestore.googleapis.com https://www.googleapis.com https://securetoken.googleapis.com https://cloudflareinsights.com https://*.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org wss://relay.walletconnect.com https://api.coinbase.com https://metamask-sdk.api.cx.metamask.io https://rpc.walletconnect.com",
   "img-src 'self' data: https: blob:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
