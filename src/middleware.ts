@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse, NextMiddleware } from 'next/server';
-const NONCE_BYTE_LENGTH = 16;
 const STRICT_CSP_DIRECTIVES = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -37,27 +36,8 @@ function extractRequestId(req: NextRequest): { requestId: string; fromHeader: bo
   return { requestId: id, fromHeader: false };
 }
 
-function generateNonce(): string {
-  const cryptoGlobal = (globalThis as any).crypto as Crypto | undefined;
-  if (cryptoGlobal && typeof cryptoGlobal.getRandomValues === 'function') {
-    const buf = new Uint8Array(NONCE_BYTE_LENGTH);
-    cryptoGlobal.getRandomValues(buf);
-    return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
-  }
-  return (
-    Array.from({ length: NONCE_BYTE_LENGTH }, () =>
-      Math.floor(Math.random() * 0xff).toString(16).padStart(2, '0'),
-    ).join('')
-  );
-}
-
-function buildCspHeader(nonce: string): string {
-  const scriptSrc = [
-    "script-src 'self'",
-    `'nonce-${nonce}'`,
-    "'strict-dynamic'",
-    "https: 'unsafe-inline'",
-  ];
+function buildCspHeader(): string {
+  const scriptSrc = ["script-src 'self' 'unsafe-inline' https:"];
   return [...STRICT_CSP_DIRECTIVES, scriptSrc.join(' ')].join('; ');
 }
 
@@ -67,26 +47,9 @@ export const config = {
 
 export const middleware: NextMiddleware = (req: NextRequest, _evt) => {
   const { requestId } = extractRequestId(req);
-  const nonce = generateNonce();
-  const csp = buildCspHeader(nonce);
-  const requestHeaders = new Headers();
-  const sourceHeaders = req.headers as Headers & {
-    forEach?: (callback: (value: string, key: string) => void) => void;
-  };
-  if (typeof sourceHeaders.forEach === 'function') {
-    sourceHeaders.forEach((value, key) => requestHeaders.set(key, value));
-  } else {
-    const incomingRequestId = sourceHeaders.get('x-request-id');
-    if (incomingRequestId) requestHeaders.set('x-request-id', incomingRequestId);
-  }
-  requestHeaders.set('x-nonce', nonce);
-  const res = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
+  const csp = buildCspHeader();
+  const res = NextResponse.next();
   res.headers.set('x-request-id', requestId);
-  res.headers.set('x-csp-nonce', nonce);
   res.headers.set('Content-Security-Policy', csp);
   for (const [k, v] of Object.entries(SECURITY_HEADERS_BASE)) {
     res.headers.set(k, v);
