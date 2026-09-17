@@ -79,7 +79,7 @@ describe('middleware security headers (AC-8 TR-3.1)', () => {
     const r1: any = callMiddleware(makeRequest('/'));
     const csp: string = r1.headers.get('content-security-policy') || '';
     expect(r1.headers.get('x-csp-nonce')).toBeNull();
-    expect(csp.includes("script-src 'self' 'unsafe-inline' https:")).toBe(true);
+    expect(csp.includes("script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https:")).toBe(true);
     expect(csp.includes("'strict-dynamic'")).toBe(false);
     expect(csp.includes("base-uri 'self'")).toBe(true);
     expect(csp.includes("object-src 'none'")).toBe(true);

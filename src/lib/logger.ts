@@ -1,6 +1,3 @@
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
-
 export type LogType = 'error' | 'warning' | 'info' | 'success';
 
 interface LogEntry {
@@ -13,8 +10,8 @@ interface LogEntry {
 }
 
 /**
- * Global logging system for ChainLegacy
- * Stores logs in /SystemLogs collection for audit and debugging
+ * Global client-side logging system for ChainLegacy.
+ * Server-side audit events are written through EventService with Firebase Admin.
  */
 export async function logSystemEvent(entry: LogEntry) {
   try {
@@ -24,24 +21,7 @@ export async function logSystemEvent(entry: LogEntry) {
       console.log(`${color}[${entry.type.toUpperCase()}][${entry.source || 'System'}] ${entry.message}\x1b[0m`, entry.details || '');
     }
 
-    // 2. Firestore logging
-    const logData = {
-      ...entry,
-      timestamp: serverTimestamp(),
-      environment: process.env.NODE_ENV,
-    };
-
-    // Filter out sensitive data if any leaked into details
-    if (logData.details) {
-      const sensitiveKeys = ['password', 'secret', 'key', 'apiKey', 'token'];
-      const cleanDetails = { ...logData.details };
-      sensitiveKeys.forEach(key => {
-        if (key in cleanDetails) cleanDetails[key] = '[REDACTED]';
-      });
-      logData.details = cleanDetails;
-    }
-
-    await addDoc(collection(db, 'SystemLogs'), logData);
+    // SystemLogs is server-admin-only; client failures remain in the browser console.
   } catch (e) {
     // Failsafe: if Firestore logging fails, at least log to console
     console.error('CRITICAL: Failed to log system event', e);
