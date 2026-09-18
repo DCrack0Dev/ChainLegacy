@@ -1,14 +1,13 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle, CheckCircle2, Search, Filter, Shield, Clock, ArrowRight, Play, Eye, Users, AlertTriangle, RotateCcw, Key, Mail, Hash, Fingerprint, FileText } from 'lucide-react';
 import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Loading } from '@/components/ui/Loading';
 
 type Claim = {
   id: string;
@@ -63,7 +62,7 @@ const VALID_TRANSITIONS: Record<Claim['status'], Claim['status'][]> = {
   cancelled: [],
 };
 
-export default function EnterpriseClaimsTransitionsPage() {
+function EnterpriseClaimsTransitionsPageContent() {
   const searchParams = useSearchParams();
   const customerId = searchParams.get('customerId');
   const legacyPlanId = searchParams.get('legacyPlanId');
@@ -572,5 +571,13 @@ export default function EnterpriseClaimsTransitionsPage() {
         )}
       </AnimatePresence>
     </EnterpriseSkeleton>
+  );
+}
+
+export default function EnterpriseClaimsTransitionsPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <EnterpriseClaimsTransitionsPageContent />
+    </Suspense>
   );
 }

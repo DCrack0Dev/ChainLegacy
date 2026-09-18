@@ -2,13 +2,14 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, AlertCircle, CheckCircle2, Search, Filter, Shield, Eye, FileText, Key, RotateCcw } from 'lucide-react';
 import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Loading } from '@/components/ui/Loading';
 
 type Vault = {
   id: string;
@@ -40,7 +41,7 @@ function getStatusConfig(status: Vault['status']) {
   return configs[status] || configs.active;
 }
 
-export default function EnterpriseVaultsPage() {
+function EnterpriseVaultsPageContent() {
   const searchParams = useSearchParams();
   const customerId = searchParams.get('customerId');
   
@@ -415,5 +416,13 @@ export default function EnterpriseVaultsPage() {
         )}
       </AnimatePresence>
     </EnterpriseSkeleton>
+  );
+}
+
+export default function EnterpriseVaultsPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <EnterpriseVaultsPageContent />
+    </Suspense>
   );
 }
