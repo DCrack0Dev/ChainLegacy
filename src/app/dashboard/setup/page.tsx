@@ -19,10 +19,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { withPerformanceLog } from '@/lib/logger';
 import { z } from 'zod';
 import { ContactSchema } from '@/types/vault';
+import { RangeSelectorCard } from '@/components/pricing/RangeSelector';
+import { calculatePricing, type PricingRangeId } from '@/lib/pricing';
 import { 
   Shield, Users, Clock, Save, Plus, Trash2, 
   MessageSquare, Smartphone, Video, ShieldCheck, 
-  Lock, AlertTriangle 
+  Lock, AlertTriangle, DollarSign
 } from 'lucide-react';
 
 const BeneficiarySchema = z.array(z.object({
@@ -69,6 +71,10 @@ export default function SetupPage() {
   const [shamirMode, setShamirMode] = useState(false);
   const [shamirThreshold, setShamirThreshold] = useState(2);
   const [shamirShares, setShamirShares] = useState(3);
+
+  // Pricing Range State
+  const [selectedPricingRange, setSelectedPricingRange] = useState<PricingRangeId | undefined>(undefined);
+  const [selectedPricing, setSelectedPricing] = useState<ReturnType<typeof calculatePricing> | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -180,7 +186,11 @@ export default function SetupPage() {
       setError('A password is required to secure your vault.');
       return;
     }
-    if (currentStep === 2) {
+    if (currentStep === 2 && !selectedPricingRange) {
+      setError('Please select a protection value range.');
+      return;
+    }
+    if (currentStep === 3) {
       if (beneficiaries.some(b => !b.name || !b.email)) {
         setError('Please complete all beneficiary details.');
         return;
@@ -195,7 +205,7 @@ export default function SetupPage() {
         return;
       }
     }
-    if (currentStep === 3) {
+    if (currentStep === 4) {
       if (!trustedContact.name || !trustedContact.email) {
         setError('Please provide a trusted contact.');
         return;
@@ -205,7 +215,7 @@ export default function SetupPage() {
         return;
       }
     }
-    if (currentStep === 4 && !secret) {
+    if (currentStep === 5 && !secret) {
       setError('You must provide a secret to store.');
       return;
     }
@@ -271,7 +281,11 @@ export default function SetupPage() {
           interval: parseFloat(interval),
           lastCheckIn: now,
           status: 'active' as const,
-          updatedAt: now
+          updatedAt: now,
+          pricingRangeId: selectedPricingRange,
+          pricingBasis: selectedPricing?.pricingBasis,
+          lifetimeFee: selectedPricing?.lifetimeFee,
+          monthlyFee: selectedPricing?.monthlyFee,
         };
 
         // Extra data for encryption/features that might still be in user doc
@@ -286,6 +300,10 @@ export default function SetupPage() {
           shamirThreshold,
           shamirShares,
           serverShare: shamirMode ? sssShares[0] : null,
+          pricingRangeId: selectedPricingRange,
+          pricingBasis: selectedPricing?.pricingBasis,
+          lifetimeFee: selectedPricing?.lifetimeFee,
+          monthlyFee: selectedPricing?.monthlyFee,
           updatedAt: serverTimestamp(),
         };
 
@@ -348,10 +366,11 @@ export default function SetupPage() {
 
   const steps = [
     { id: 1, name: 'Security', icon: <Shield className="h-4 w-4" /> },
-    { id: 2, name: 'Beneficiaries', icon: <Users className="h-4 w-4" /> },
-    { id: 3, name: 'Governance', icon: <Clock className="h-4 w-4" /> },
-    { id: 4, name: 'Legacy', icon: <MessageSquare className="h-4 w-4" /> },
-    { id: 5, name: 'Review', icon: <Save className="h-4 w-4" /> }
+    { id: 2, name: 'Pricing', icon: <DollarSign className="h-4 w-4" /> },
+    { id: 3, name: 'Beneficiaries', icon: <Users className="h-4 w-4" /> },
+    { id: 4, name: 'Governance', icon: <Clock className="h-4 w-4" /> },
+    { id: 5, name: 'Legacy', icon: <MessageSquare className="h-4 w-4" /> },
+    { id: 6, name: 'Review', icon: <Save className="h-4 w-4" /> }
   ];
 
   return (
@@ -526,8 +545,50 @@ export default function SetupPage() {
               </Card>
             )}
 
-            {/* Step 2: Beneficiaries */}
+            {/* Step 2: Pricing Range */}
             {currentStep === 2 && (
+              <Card className="border-gold/20">
+                <CardHeader 
+                  title="Protection Value Range" 
+                  subtitle="Select the approximate value range of what you want to protect. You don't need to provide an exact amount." 
+                />
+                <CardContent>
+                  <RangeSelectorCard
+                    title="What are you protecting?"
+                    subtitle="Select the approximate value range. You don't need to provide an exact amount."
+                    onSelect={(rangeId, pricing) => {
+                      setSelectedPricingRange(rangeId);
+                      setSelectedPricing(pricing);
+                    }}
+                    selectedRangeId={selectedPricingRange}
+                  />
+                  {selectedPricing && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-8 p-6 rounded-2xl bg-gold/5 border border-gold/20"
+                    >
+                      <h4 className="text-sm font-black text-gold uppercase tracking-widest mb-4">Your Plan Price</h4>
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                        <div className="flex flex-col items-center">
+                          <p className="text-[10px] font-black text-gold uppercase tracking-widest">Lifetime Access</p>
+                          <p className="text-2xl font-black text-white">${selectedPricing.lifetimeFee.toLocaleString()}</p>
+                          <p className="text-xs text-gray-500">3% of ${selectedPricing.pricingBasis.toLocaleString()}</p>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <p className="text-[10px] font-black text-gold uppercase tracking-widest">Monthly</p>
+                          <p className="text-2xl font-black text-white">${selectedPricing.monthlyFee.toLocaleString()}/mo</p>
+                          <p className="text-xs text-gray-500">10% of lifetime fee</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Step 3: Beneficiaries */}
+            {currentStep === 3 && (
               <Card className="border-gold/20">
                 <CardHeader title="Beneficiaries" subtitle="Designate who will inherit your vault." />
                 <CardContent className="space-y-6">

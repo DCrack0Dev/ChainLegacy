@@ -13,9 +13,21 @@ import {
   Scroll,
   Fingerprint,
   ArrowRight,
+  Mail,
+  MessageSquare,
+  Phone,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/components/auth/AuthProvider';
+
+const SALES_CONTACTS = {
+  email: 'demitechwebservices@gmail.com',
+  whatsapp: '+27650241517',
+  phone: '+27650241517',
+  whatsappUrl: 'https://wa.me/27650241517',
+  phoneUrl: 'tel:+27650241517',
+  emailUrl: 'mailto:demitechwebservices@gmail.com',
+};
 
 const CAPABILITIES = [
   {
@@ -170,6 +182,39 @@ export default function EnterpriseLandingPage() {
                   How Individual Works
                 </Button>
               </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-24 border-t border-white/5 bg-white/[0.015]">
+        <div className="container mx-auto px-6">
+          <div className="max-w-3xl mx-auto text-center space-y-8">
+            <h2 className="text-3xl md:text-5xl font-black uppercase tracking-tight text-white">
+              Need Custom Enterprise Pricing?
+            </h2>
+            <p className="text-gray-400 text-lg leading-relaxed">
+              Get a custom quote based on your organization's protected value range and requirements.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <a href={SALES_CONTACTS.emailUrl}>
+                <Button variant="outline" className="w-full sm:w-auto border-gold/30 text-gold hover:bg-gold/10 uppercase tracking-widest font-black h-14 px-10">
+                  <Mail className="mr-2 h-4 w-4" />
+                  Email Sales
+                </Button>
+              </a>
+              <a href={SALES_CONTACTS.whatsappUrl} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" className="w-full sm:w-auto border-green-500/30 text-green-400 hover:bg-green-500/10 uppercase tracking-widest font-black h-14 px-10">
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  WhatsApp Sales
+                </Button>
+              </a>
+              <a href={SALES_CONTACTS.phoneUrl}>
+                <Button variant="outline" className="w-full sm:w-auto border-blue-500/30 text-blue-400 hover:bg-blue-500/10 uppercase tracking-widest font-black h-14 px-10">
+                  <Phone className="mr-2 h-4 w-4" />
+                  Call Sales
+                </Button>
+              </a>
             </div>
           </div>
         </div>

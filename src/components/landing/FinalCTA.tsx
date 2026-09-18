@@ -4,7 +4,16 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
-import { Building2, ShieldCheck, User } from 'lucide-react';
+import { Building2, ShieldCheck, User, Mail, MessageSquare, Phone } from 'lucide-react';
+
+const SALES_CONTACTS = {
+  email: 'demitechwebservices@gmail.com',
+  whatsapp: '+27650241517',
+  phone: '+27650241517',
+  whatsappUrl: 'https://wa.me/27650241517',
+  phoneUrl: 'tel:+27650241517',
+  emailUrl: 'mailto:demitechwebservices@gmail.com',
+};
 
 export function FinalCTA() {
   return (
@@ -52,6 +61,32 @@ export function FinalCTA() {
                 Explore Enterprise
               </Button>
             </Link>
+          </div>
+
+          <div className="mt-16 pt-8 border-t border-black/20">
+            <h3 className="text-lg font-black text-black mb-6 text-center uppercase tracking-tight">
+              Enterprise Inquiries
+            </h3>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <a href={SALES_CONTACTS.emailUrl}>
+                <Button variant="outline" className="w-full sm:w-auto border-black/30 text-black hover:bg-black/10 uppercase tracking-widest font-black h-14 px-10">
+                  <Mail className="mr-2 h-4 w-4" />
+                  Email Sales
+                </Button>
+              </a>
+              <a href={SALES_CONTACTS.whatsappUrl} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" className="w-full sm:w-auto border-green-500/30 text-green-600 hover:bg-green-500/10 uppercase tracking-widest font-black h-14 px-10">
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  WhatsApp Sales
+                </Button>
+              </a>
+              <a href={SALES_CONTACTS.phoneUrl}>
+                <Button variant="outline" className="w-full sm:w-auto border-blue-500/30 text-blue-600 hover:bg-blue-500/10 uppercase tracking-widest font-black h-14 px-10">
+                  <Phone className="mr-2 h-4 w-4" />
+                  Call Sales
+                </Button>
+              </a>
+            </div>
           </div>
 
           <p className="mt-12 text-black/40 text-[10px] font-black uppercase tracking-[0.3em]">
