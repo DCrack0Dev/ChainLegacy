@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
 import { z } from 'zod';
+import { v1Route, structuredJson } from '@/lib/v1-route';
+import { ApiError } from '@/lib/api-errors';
+import { adminDb } from '@/lib/firebase-admin';
+import { IdentityVerificationStatus } from '@/types/enterprise';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,24 +14,33 @@ const ListCustomersSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
+const CreateCustomerSchema = z.object({
+  partnerCustomerId: z.string().min(1),
+  email: z.string().email(),
+  fullName: z.string().min(1),
+  phone: z.string().optional(),
+  walletAddress: z.string().optional(),
+  firebaseUid: z.string().optional(),
+  organizationId: z.string().optional(),
+});
+
+export const GET = v1Route({
+  method: 'GET',
+  scope: 'customers:read',
+  requireOrg: true,
+  async handle({ auth, searchParams, requestId }) {
     const parsed = ListCustomersSchema.safeParse(Object.fromEntries(searchParams));
-    
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid query', details: parsed.error.format() }, { status: 400 });
+      throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid query', parsed.error.format());
     }
+    if (!adminDb) throw new ApiError(500, 'DB_UNAVAILABLE', 'Database not initialized');
 
+    const orgId = auth.organizationId!;
     const { partnerCustomerId, firebaseUid, email, limit, offset } = parsed.data;
-    const orgId = 'org_legacy_migration';
 
-    if (!adminDb) {
-      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
-    }
-
-    let query = adminDb
-      .collection('organizations').doc(orgId)
+    let query: FirebaseFirestore.Query = adminDb
+      .collection('organizations')
+      .doc(orgId)
       .collection('customers')
       .where('organizationId', '==', orgId)
       .orderBy('createdAt', 'desc');
@@ -39,74 +50,54 @@ export async function GET(request: Request) {
     if (email) query = query.where('email', '==', email);
 
     const snap = await query.limit(limit + 1).offset(offset).get();
-    const customers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
+    const customers = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     const hasMore = customers.length > limit;
     const items = hasMore ? customers.slice(0, limit) : customers;
 
-    return NextResponse.json({
+    return structuredJson({
       data: items,
       meta: { limit, offset, hasMore, total: items.length + offset },
+      requestId,
     });
-
-  } catch (error: any) {
-    console.error('[Enterprise Customers List] Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
-}
-
-const CreateCustomerSchema = z.object({
-  partnerCustomerId: z.string().min(1),
-  email: z.string().email(),
-  fullName: z.string().min(1),
-  phone: z.string().optional(),
-  walletAddress: z.string().optional(),
-  firebaseUid: z.string().optional(),
+  },
 });
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const parsed = CreateCustomerSchema.safeParse(body);
-    
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid payload', details: parsed.error.format() }, { status: 400 });
-    }
+export const POST = v1Route({
+  method: 'POST',
+  scope: 'customers:write',
+  requireOrg: true,
+  bodySchema: CreateCustomerSchema,
+  async handle({ auth, body, requestId }) {
+    if (!adminDb) throw new ApiError(500, 'DB_UNAVAILABLE', 'Database not initialized');
+    const orgId = auth.organizationId!;
+    const { partnerCustomerId, email, fullName, phone, walletAddress, firebaseUid } = body;
 
-    const orgId = 'org_legacy_migration';
-    const { partnerCustomerId, email, fullName, phone, walletAddress, firebaseUid } = parsed.data;
-
-    if (!adminDb) {
-      return NextResponse.json({ error: 'Database not initialized' }, { status: 500 });
-    }
-
-    // Check for duplicate partnerCustomerId
     const existingPartner = await adminDb
-      .collection('organizations').doc(orgId)
+      .collection('organizations')
+      .doc(orgId)
       .collection('customers')
       .where('partnerCustomerId', '==', partnerCustomerId)
       .limit(1)
       .get();
     if (!existingPartner.empty) {
-      return NextResponse.json({ error: 'partnerCustomerId already exists' }, { status: 409 });
+      throw new ApiError(409, 'DUPLICATE_PARTNER_CUSTOMER_ID', 'partnerCustomerId already exists');
     }
 
-    // Check for duplicate firebaseUid
     if (firebaseUid) {
       const existingFirebase = await adminDb
-        .collection('organizations').doc(orgId)
+        .collection('organizations')
+        .doc(orgId)
         .collection('customers')
         .where('firebaseUid', '==', firebaseUid)
         .limit(1)
         .get();
       if (!existingFirebase.empty) {
-        return NextResponse.json({ error: 'firebaseUid already linked to another customer' }, { status: 409 });
+        throw new ApiError(409, 'DUPLICATE_FIREBASE_UID', 'firebaseUid already linked to another customer');
       }
     }
 
     const customerId = `cust_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = new Date();
-
     const customer = {
       id: customerId,
       organizationId: orgId,
@@ -117,19 +108,18 @@ export async function POST(request: Request) {
       walletAddress,
       firebaseUid: firebaseUid ?? null,
       vaultId: null,
-      verificationStatus: 'not_started',
+      verificationStatus: IdentityVerificationStatus.NOT_STARTED,
       createdAt: now,
       updatedAt: now,
     };
 
     await adminDb
-      .collection('organizations').doc(orgId)
-      .collection('customers').doc(customerId).set(customer);
+      .collection('organizations')
+      .doc(orgId)
+      .collection('customers')
+      .doc(customerId)
+      .set(customer);
 
-    return NextResponse.json({ customer }, { status: 201 });
-
-  } catch (error: any) {
-    console.error('[Enterprise Customers Create] Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-  }
-}
+    return structuredJson({ customer, requestId }, 201);
+  },
+});

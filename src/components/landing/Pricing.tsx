@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Check, Star, Zap, Shield, Crown } from 'lucide-react';
+import { Check, Star, Zap, Shield, Crown, Building2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -73,6 +73,19 @@ export function Pricing() {
     }
   ];
 
+  const enterpriseFeatures = [
+    "Unlimited customers, vaults & legacy plans",
+    "Full enterprise console (customers, plans, beneficiaries, guardians, claims)",
+    "Identity verification & server-owned claim authorization",
+    "API keys with 17 granular scopes (sandbox + production)",
+    "HMAC-SHA256 signed webhooks with retry logic",
+    "Organization-scoped audit trail with CSV/JSON export",
+    "Liveness monitoring with suspicion scoring",
+    "Guardian quorum workflows (M-of-N approvals)",
+    "Tenant isolation enforced at Firestore + API layer",
+    "SHA-256 hashed API keys (clsbox_ / clprod_ prefixes)",
+  ];
+
   return (
     <section className="py-24 bg-black relative">
       <div className="container mx-auto px-6">
@@ -84,7 +97,7 @@ export function Pricing() {
           </p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
           {tiers.map((tier, index) => (
             <motion.div
               key={index}
@@ -135,6 +148,45 @@ export function Pricing() {
               </Link>
             </motion.div>
           ))}
+        </div>
+
+        {/* Enterprise Tier */}
+        <div className="rounded-[3rem] border border-gold/30 bg-gold/[0.03] p-8 md:p-12 space-y-8">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 text-xs font-black tracking-[0.2em] uppercase bg-gold/10 text-gold rounded-full border border-gold/20">
+              <Building2 className="h-3.5 w-3.5" />
+              Enterprise
+            </div>
+            <h3 className="text-3xl md:text-4xl font-black text-white mb-4 uppercase tracking-tight">
+              For Organizations
+            </h3>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+              Manage digital legacy services for your customers. Volume pricing, custom contracts, and dedicated infrastructure available.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {enterpriseFeatures.map((feature, i) => (
+              <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                <Check className="h-4 w-4 text-gold shrink-0 mt-0.5" />
+                <span className="text-sm text-gray-300">{feature}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/enterprise/onboard">
+              <Button size="xl" className="w-full sm:w-auto bg-gold hover:bg-gold-dark text-black font-black shadow-[0_0_40px_rgba(212,175,55,0.3)] uppercase tracking-widest h-14 px-10">
+                Start Enterprise Trial
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
+            <Link href="/enterprise">
+              <Button variant="outline" size="xl" className="w-full sm:w-auto border-white/10 text-white hover:bg-white/5 uppercase tracking-widest font-black h-14 px-10">
+                Explore Enterprise
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
     </section>

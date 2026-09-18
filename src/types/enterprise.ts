@@ -137,6 +137,28 @@ export const CustomerCreateSchema = CustomerSchema.omit({ id: true, organization
 export type CustomerCreate = z.infer<typeof CustomerCreateSchema>;
 
 /**
+ * Identity Verification record — tracks the server-owned verification flow for a customer.
+ * Stored under organization/verifications for querying.
+ */
+export const VerificationSchema = z.object({
+  id: z.string().min(1),
+  organizationId: z.string().min(1),
+  customerId: z.string().min(1),
+  customerName: z.string().min(1),
+  customerEmail: z.string().email(),
+  status: z.nativeEnum(IdentityVerificationStatus).default(IdentityVerificationStatus.NOT_STARTED),
+  provider: z.string().default('mock'),
+  verificationId: z.string().optional(),
+  providerData: z.record(z.unknown()).optional(),
+  createdAt: z.coerce.date(),
+  completedAt: z.coerce.date().optional(),
+  updatedAt: z.coerce.date(),
+});
+export type Verification = z.infer<typeof VerificationSchema>;
+export const VerificationCreateSchema = VerificationSchema.omit({ id: true, organizationId: true, createdAt: true, updatedAt: true });
+export type VerificationCreate = z.infer<typeof VerificationCreateSchema>;
+
+/**
  * Vault — the protected legacy container. Belongs to exactly one Customer inside
  * one Organization, and mirrors `ownerUid` for cheap ownership checks.
  */
@@ -276,7 +298,16 @@ export const OrganizationSchema = z.object({
   updatedAt: z.coerce.date(),
 });
 export type Organization = z.infer<typeof OrganizationSchema>;
-export const OrganizationCreateSchema = OrganizationSchema.omit({ id: true, status: true, webhookSecret: true, createdAt: true, updatedAt: true });
+export const OrganizationCreateSchema = OrganizationSchema.omit({
+  id: true,
+  status: true,
+  webhookSecret: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  /** Optional in request body — server always overwrites with authenticated uid. */
+  ownerUid: z.string().min(1).optional(),
+});
 export type OrganizationCreate = z.infer<typeof OrganizationCreateSchema>;
 
 export const ApiKeySchema = z.object({

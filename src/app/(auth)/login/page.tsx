@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,17 +47,26 @@ export default function LoginPage() {
         lastLogin: new Date().toISOString(),
       };
 
-      await updateDoc(doc(db, 'users', user.uid), {
-        sessions: arrayUnion(device),
-        lastLogin: new Date().toISOString(),
-        logs: arrayUnion({
-          action: 'login_success',
-          timestamp: new Date().toISOString(),
-          details: `Account accessed from ${device.browser} on ${device.os} (IP: ${ip}).`
-        })
-      });
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          sessions: arrayUnion(device),
+          lastLogin: new Date().toISOString(),
+          logs: arrayUnion({
+            action: 'login_success',
+            timestamp: new Date().toISOString(),
+            details: `Account accessed from ${device.browser} on ${device.os} (IP: ${ip}).`
+          })
+        });
+      } catch {
+        // Enterprise-only owners may not have a personal users/{uid} doc yet.
+      }
 
-      router.push('/dashboard');
+      const redirect = searchParams.get('redirect');
+      const safeRedirect =
+        redirect && redirect.startsWith('/') && !redirect.startsWith('//')
+          ? redirect
+          : '/dashboard';
+      router.push(safeRedirect);
     } catch (err: any) {
       setError(err.message || 'Failed to login');
     } finally {
@@ -109,6 +119,10 @@ export default function LoginPage() {
               Don&apos;t have an account?{' '}
               <Link href="/register" className="text-gold hover:underline">
                 Create one
+              </Link>
+              {' · '}
+              <Link href="/enterprise" className="text-gold hover:underline">
+                Enterprise
               </Link>
             </p>
           </CardFooter>

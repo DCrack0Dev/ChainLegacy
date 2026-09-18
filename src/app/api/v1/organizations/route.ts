@@ -23,13 +23,27 @@ export const POST = v1Route({
       );
     }
     const ownerUid = auth.uid;
+    if (adminDb) {
+      const existingMap = await adminDb.collection('ownerUidToOrgId').doc(ownerUid).get();
+      if (existingMap.exists) {
+        const existingOrgId = (existingMap.data() as any)?.organizationId;
+        throw new ApiError(
+          409,
+          'ORG_ALREADY_EXISTS',
+          'This account already owns an organization',
+          { organizationId: existingOrgId },
+        );
+      }
+    }
     const existingSlugs = new Set<string>();
     if (adminDb) {
       const orgsSnap = await adminDb.collection('organizations').select('slug').get();
       orgsSnap.forEach((d: any) => existingSlugs.add(d.data().slug));
     }
     const { organization, defaultSandboxKey } = OrganizationService.create({
-      ...body,
+      name: body.name,
+      slug: body.slug,
+      country: body.country,
       ownerUid,
       existingSlugs,
     });
@@ -83,6 +97,32 @@ export const POST = v1Route({
   },
 });
 
-export function GET(req: NextRequest) {
-  return structuredJson({ endpoints: ['POST /api/v1/organizations'], status: 'ok' });
-}
+export const GET = v1Route({
+  method: 'GET',
+  requireOrg: false,
+  orgPayloadGuard: false,
+  async handle({ auth, requestId }) {
+    if (auth.method !== 'firebase' || !auth.uid) {
+      throw new ApiError(401, 'AUTH_REQUIRED', 'Listing organizations requires an authenticated session');
+    }
+    if (!adminDb) {
+      throw new ApiError(500, 'DB_UNAVAILABLE', 'Database not initialized');
+    }
+    const snap = await adminDb
+      .collection('organizations')
+      .where('ownerUid', '==', auth.uid)
+      .get();
+    const organizations = snap.docs.map((d) => {
+      const data = d.data() as any;
+      return {
+        id: d.id,
+        name: data.name,
+        slug: data.slug,
+        status: data.status,
+        country: data.country,
+        createdAt: data.createdAt,
+      };
+    });
+    return structuredJson({ organizations, requestId });
+  },
+});

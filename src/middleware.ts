@@ -61,7 +61,10 @@ export const middleware: NextMiddleware = (req: NextRequest, _evt) => {
       { status: 404 },
     );
   }
-  if (pathname.startsWith('/enterprise')) {
+  // Public enterprise marketing landing only. Console routes remain authenticated.
+  const isPublicEnterprise =
+    pathname === '/enterprise' || pathname === '/enterprise/';
+  if (pathname.startsWith('/enterprise') && !isPublicEnterprise) {
     const sessionCookie =
       req.cookies.get('__session')?.value ||
       req.cookies.get('session')?.value ||

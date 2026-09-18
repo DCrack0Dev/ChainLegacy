@@ -30,6 +30,9 @@ const Pricing = dynamic(() => import('@/components/landing/Pricing').then(mod =>
 const FinalCTA = dynamic(() => import('@/components/landing/FinalCTA').then(mod => mod.FinalCTA), {
   loading: () => <div className="h-96 bg-black animate-pulse" />
 });
+const EnterpriseLanding = dynamic(() => import('@/components/landing/Enterprise').then(mod => mod.EnterpriseLanding), {
+  loading: () => <div className="h-96 bg-black animate-pulse" />
+});
 
 export default function LandingPage() {
   // Public landing page doesn't need to block for auth
@@ -58,6 +61,9 @@ export default function LandingPage() {
           <Pricing />
         </Suspense>
         <Suspense fallback={<div className="h-96 bg-black animate-pulse" />}>
+          <EnterpriseLanding />
+        </Suspense>
+        <Suspense fallback={<div className="h-96 bg-black animate-pulse" />}>
           <FinalCTA />
         </Suspense>
       </main>
@@ -78,7 +84,7 @@ export default function LandingPage() {
                 <span className="text-xl font-black text-white uppercase tracking-tighter">ChainLegacy</span>
               </div>
               <p className="text-gray-500 text-sm max-w-sm mb-8">
-                The enterprise-grade infrastructure for digital inheritance. Built on zero-knowledge principles to ensure your legacy is protected and delivered safely.
+                Digital legacy infrastructure for individuals and organizations. Built on zero-knowledge principles to ensure legacies are protected and delivered safely.
               </p>
               <div className="flex items-center space-x-4">
                 <div className="h-10 w-10 bg-white/5 rounded-full border border-white/10 flex items-center justify-center text-gray-400 hover:text-gold hover:border-gold/30 transition-all cursor-pointer">
@@ -96,10 +102,11 @@ export default function LandingPage() {
             <div>
               <h4 className="text-xs font-black text-white uppercase tracking-[0.3em] mb-8">Product</h4>
               <ul className="space-y-4 text-sm text-gray-500">
-                <li><Link href="/simulator" className="hover:text-gold transition-colors">Simulator</Link></li>
+                <li><Link href="/register?intent=personal" className="hover:text-gold transition-colors">For Individuals</Link></li>
+                <li><Link href="/enterprise" className="hover:text-gold transition-colors">For Enterprise</Link></li>
                 <li><Link href="/pricing" className="hover:text-gold transition-colors">Pricing</Link></li>
                 <li><Link href="/security" className="hover:text-gold transition-colors">Security</Link></li>
-                <li><Link href="/audit" className="hover:text-gold transition-colors">Audit Report</Link></li>
+                <li><Link href="/how-it-works" className="hover:text-gold transition-colors">How It Works</Link></li>
               </ul>
             </div>
             

@@ -571,6 +571,29 @@ export async function startIdentityVerification(
     phone: customer.phone,
   });
 
+  // Create verification record
+  const verificationId = result.verificationId;
+  const now = nowStamp();
+  const verificationRef = adminDb
+    .collection('organizations')
+    .doc(organizationId)
+    .collection('verifications')
+    .doc(verificationId);
+  
+  await verificationRef.set({
+    id: verificationId,
+    organizationId,
+    customerId,
+    customerName: customer.fullName,
+    customerEmail: customer.email,
+    status: IdentityVerificationStatus.PENDING,
+    provider: provider.name,
+    verificationId: result.verificationId,
+    providerData: result.providerData ?? {},
+    createdAt: now,
+    updatedAt: now,
+  });
+
   await setCustomerVerificationStatus(organizationId, customerId, IdentityVerificationStatus.PENDING, {
     actor: 'server',
     reason: `provider:${provider.name}:${result.verificationId}`,
@@ -611,6 +634,21 @@ export async function completeIdentityVerificationFromProvider(
       { verificationId, providerStatus: providerResult.status }
     );
   }
+
+  // Update verification record
+  const verificationRef = adminDb
+    .collection('organizations')
+    .doc(organizationId)
+    .collection('verifications')
+    .doc(verificationId);
+  
+  const now = nowStamp();
+  await verificationRef.update({
+    status: providerResult.status,
+    providerData: providerResult.providerData ?? {},
+    completedAt: now,
+    updatedAt: now,
+  });
 
   return setCustomerVerificationStatus(organizationId, customerId, providerResult.status, {
     actor: 'server',

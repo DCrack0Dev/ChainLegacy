@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodSchema } from 'zod';
-import { ApiKeyScope } from '@/types/enterprise';
+import { ApiKeyScope, ApiScopes } from '@/types/enterprise';
+import { adminDb } from '@/lib/firebase-admin';
 import { ApiError, apiErrorResponse, extractRequestId } from '@/lib/api-errors';
 import {
   assertPayloadOrgMatchesAuth,
@@ -152,8 +153,22 @@ export function v1Route<TBody = unknown>(opts: V1RouteArgs<TBody>) {
             const { adminAuth } = await import('@/lib/firebase-admin');
             if (!adminAuth) throw new Error('FIREBASE_ADMIN_NOT_INITIALIZED');
             const decoded = await adminAuth.verifyIdToken(bearer.value);
-            const orgId = ownerUidToOrgId.get(decoded.uid);
-            auth = { method: 'firebase', uid: decoded.uid, organizationId: orgId, scopes: orgId ? ([...[]] as any) : [], actorId: `user:${decoded.uid}` };
+            let orgId = ownerUidToOrgId.get(decoded.uid);
+            if (!orgId && adminDb) {
+              const mapSnap = await adminDb.collection('ownerUidToOrgId').doc(decoded.uid).get();
+              if (mapSnap.exists) {
+                orgId = (mapSnap.data() as any)?.organizationId as string | undefined;
+              }
+            }
+            // Org owners receive full API scopes for console operations.
+            // Partner integrations should continue using scoped API keys.
+            auth = {
+              method: 'firebase',
+              uid: decoded.uid,
+              organizationId: orgId,
+              scopes: orgId ? ([...ApiScopes] as ApiKeyScope[]) : [],
+              actorId: `user:${decoded.uid}`,
+            };
           } catch (e) {
             throw new ApiError(401, 'INVALID_ID_TOKEN', 'ID token invalid or expired');
           }

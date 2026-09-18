@@ -1,0 +1,399 @@
+'use client';
+
+export const dynamic = 'force-dynamic';
+
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Loader2, AlertCircle, CheckCircle2, Search, Filter, Shield, AlertTriangle, RotateCcw, Eye, FileText } from 'lucide-react';
+import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { motion, AnimatePresence } from 'framer-motion';
+
+type Verification = {
+  id: string;
+  organizationId: string;
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+  status: 'not_started' | 'pending' | 'verified' | 'rejected' | 'manual_review';
+  provider: string;
+  verificationId?: string;
+  providerData?: Record<string, unknown>;
+  createdAt: string;
+  completedAt?: string;
+};
+
+function getStatusConfig(status: Verification['status']) {
+  const configs = {
+    not_started: { label: 'Not Started', icon: <Shield className="h-3 w-3" />, className: 'bg-gray-500/20 text-gray-400' },
+    pending: { label: 'Pending', icon: <Loader2 className="h-3 w-3 animate-spin" />, className: 'bg-amber-500/20 text-amber-400' },
+    verified: { label: 'Verified', icon: <CheckCircle2 className="h-3 w-3" />, className: 'bg-emerald-500/20 text-emerald-400' },
+    rejected: { label: 'Rejected', icon: <AlertTriangle className="h-3 w-3" />, className: 'bg-red-500/20 text-red-400' },
+    manual_review: { label: 'Manual Review', icon: <AlertTriangle className="h-3 w-3" />, className: 'bg-blue-500/20 text-blue-400' },
+  };
+  return configs[status] || configs.not_started;
+}
+
+export default function EnterpriseVerificationPage() {
+  const searchParams = useSearchParams();
+  const customerId = searchParams.get('customerId');
+  
+  const [verifications, setVerifications] = useState<Verification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ total: 0, verified: 0, pending: 0, rejected: 0 });
+  const [startingVerification, setStartingVerification] = useState<string | null>(null);
+  const [completingVerification, setCompletingVerification] = useState<{ customerId: string; verificationId: string } | null>(null);
+  const [outcome, setOutcome] = useState<'verified' | 'rejected' | 'manual_review'>('verified');
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchVerifications = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        limit: pageSize.toString(),
+        offset: ((page - 1) * pageSize).toString(),
+      });
+      if (customerId) params.append('customerId', customerId);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (search) params.append('search', search);
+
+      const res = await fetch(`/api/v1/verifications?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch verifications');
+      const data = await res.json();
+      setVerifications(data.data || []);
+      setTotal(data.meta?.total || 0);
+      
+      // Compute stats
+      const allRes = await fetch(`/api/v1/verifications${customerId ? `?customerId=${customerId}` : ''}&limit=1000`);
+      const allData = await allRes.json();
+      const allVerifications = allData.data || [];
+      setStats({
+        total: allVerifications.length,
+        verified: allVerifications.filter((v: Verification) => v.status === 'verified').length,
+        pending: allVerifications.filter((v: Verification) => v.status === 'pending').length,
+        rejected: allVerifications.filter((v: Verification) => v.status === 'rejected' || v.status === 'manual_review').length,
+      });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVerifications();
+  }, [page, search, statusFilter, customerId]);
+
+  const handleStartVerification = async (customerId: string, customerName: string) => {
+    setStartingVerification(customerId);
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/v1/customers/${customerId}/verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to start verification');
+      }
+      alert(`Verification started for ${customerName}. Status will update to pending.`);
+      fetchVerifications();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setStartingVerification(null);
+      setSubmitting(false);
+    }
+  };
+
+  const handleCompleteVerification = async () => {
+    if (!completingVerification) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/v1/customers/${completingVerification.customerId}/verification/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verificationId: completingVerification.verificationId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to complete verification');
+      }
+      alert('Verification completed. Status updated.');
+      setCompletingVerification(null);
+      fetchVerifications();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openCompleteModal = (verification: Verification) => {
+    if (verification.verificationId) {
+      setCompletingVerification({ customerId: verification.customerId, verificationId: verification.verificationId });
+    }
+  };
+
+  const hasMore = page * pageSize < total;
+
+  return (
+    <EnterpriseSkeleton
+      eyebrow="Identity Verification"
+      title={customerId ? `Verifications for Customer` : 'Identity Verifications'}
+      subtitle={customerId ? 'Manage identity verification for this customer' : 'Server-owned verification status. The browser can only start a flow; outcomes (verified/rejected/manual_review) are server-authoritative.'}
+      stats={[
+        { label: 'Total', value: stats.total },
+        { label: 'Verified', value: stats.verified, tone: 'positive' },
+        { label: 'Pending', value: stats.pending, tone: 'neutral' },
+        { label: 'Rejected/Review', value: stats.rejected, tone: stats.rejected > 0 ? 'negative' : 'positive' },
+      ]}
+      cta={[
+        { label: 'Refresh', variant: 'secondary', action: fetchVerifications },
+      ]}
+    >
+      {error && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center space-x-3">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <p className="text-red-500 text-sm font-medium">{error}</p>
+        </motion.div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+          <Input
+            placeholder="Search by customer name or email..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="pl-10 pr-4"
+          />
+        </div>
+        <div className="relative">
+          <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            className="pl-10 pr-10 bg-black border border-white/10 h-14 text-white rounded-2xl appearance-none"
+          >
+            <option value="all">All Statuses</option>
+            <option value="not_started">Not Started</option>
+            <option value="pending">Pending</option>
+            <option value="verified">Verified</option>
+            <option value="rejected">Rejected</option>
+            <option value="manual_review">Manual Review</option>
+          </select>
+          <Filter className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-gray-500 uppercase tracking-widest text-[11px] bg-white/[0.02]">
+              <tr>
+                <th className="py-3 px-6">Customer</th>
+                <th className="py-3 px-6">Customer ID</th>
+                <th className="py-3 px-6">Status</th>
+                <th className="py-3 px-6">Provider</th>
+                <th className="py-3 px-6">Verification ID</th>
+                <th className="py-3 px-6">Created</th>
+                <th className="py-3 px-6 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="text-gray-300">
+              {loading && verifications.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-gold mx-auto" />
+                  </td>
+                </tr>
+              ) : verifications.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-gray-500">No verifications found</td>
+                </tr>
+              ) : (
+                verifications.map((verification) => {
+                  const statusConfig = getStatusConfig(verification.status);
+                  const { label, icon, className } = statusConfig;
+                  const isStarting = startingVerification === verification.customerId;
+                  const isCompleting = completingVerification?.customerId === verification.customerId;
+                  
+                  return (
+                    <tr key={verification.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
+                            <Shield className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">{verification.customerName}</p>
+                            <p className="text-[11px] text-gray-500 font-mono truncate max-w-xs">{verification.customerEmail}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 font-mono text-[11px] text-gray-400">{verification.customerId}</td>
+                      <td className="py-4 px-6">
+                        <span className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${className}`}>
+                          {icon} {label}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6 text-[11px] text-gray-400">{verification.provider}</td>
+                      <td className="py-4 px-6 text-[11px] text-gray-500 font-mono truncate max-w-xs">{verification.verificationId || '—'}</td>
+                      <td className="py-4 px-6 text-[11px] text-gray-500">
+                        {new Date(verification.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="py-4 px-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {verification.status === 'not_started' && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleStartVerification(verification.customerId, verification.customerName)}
+                              disabled={isStarting || submitting}
+                              className="text-xs"
+                            >
+                              {isStarting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> <span>Starting...</span> : 'Start'}
+                            </Button>
+                          )}
+                          {verification.status === 'pending' && verification.verificationId && (
+                            <Button
+                              variant="accent"
+                              size="sm"
+                              onClick={() => openCompleteModal(verification)}
+                              disabled={isCompleting || submitting}
+                              className="text-xs"
+                            >
+                              {isCompleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />} Complete
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => alert(JSON.stringify(verification.providerData, null, 2))}
+                            className="text-gray-400 hover:text-gold"
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {(total > pageSize || page > 1) && (
+          <div className="flex items-center justify-between px-6 py-4 border-t border-white/10">
+            <p className="text-[11px] text-gray-500">
+              Showing {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} of {total}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPage(p => p + 1)}
+                disabled={!hasMore || loading}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Complete Verification Modal */}
+      <AnimatePresence>
+        {completingVerification && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[400] flex items-center justify-center p-4"
+            onClick={() => setCompletingVerification(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-md bg-card border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <Shield className="h-32 w-32 text-gold" />
+              </div>
+
+              <div className="relative z-10 space-y-8 text-center">
+                <div className="h-16 w-16 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
+                  <Shield className="h-8 w-8 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-extrabold text-white tracking-tight mb-2">Complete Verification</h3>
+                  <p className="text-sm text-gray-500 font-medium">Server-owned outcome for customer verification.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gold uppercase tracking-widest">Outcome</label>
+                    <select
+                      value={outcome}
+                      onChange={(e) => setOutcome(e.target.value as any)}
+                      className="w-full bg-black border border-white/10 h-14 text-white rounded-2xl appearance-none"
+                    >
+                      <option value="verified">Verified</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="manual_review">Manual Review</option>
+                    </select>
+                    <p className="text-[10px] text-gray-500">Only server can set verified/rejected/manual_review outcomes.</p>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <Button
+                    variant="secondary"
+                    className="flex-1 rounded-2xl h-14 font-bold uppercase tracking-widest text-xs"
+                    onClick={() => setCompletingVerification(null)}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="accent"
+                    className="flex-1 bg-gold hover:bg-gold-dark text-black rounded-2xl h-14 font-bold uppercase tracking-widest text-xs shadow-lg shadow-gold/20"
+                    onClick={handleCompleteVerification}
+                    isLoading={submitting}
+                  >
+                    Complete Verification
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </EnterpriseSkeleton>
+  );
+}
