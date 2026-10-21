@@ -202,7 +202,7 @@ function EnterpriseClaimsTransitionsPageContent() {
       setGuardianProof(null);
       fetchClaims();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -211,7 +211,7 @@ function EnterpriseClaimsTransitionsPageContent() {
   const openTransitionModal = (claim: Claim) => {
     const validNext = VALID_TRANSITIONS[claim.status] || [];
     if (validNext.length === 0) {
-      alert('No valid transitions available for this claim status');
+      console.error('No valid transitions available for this claim status');
       return;
     }
     setTransitioningClaim(claim);

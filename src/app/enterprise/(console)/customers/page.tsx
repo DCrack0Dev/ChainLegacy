@@ -113,7 +113,7 @@ export default function EnterpriseCustomersPage() {
       resetForm();
       fetchCustomers();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -130,7 +130,7 @@ export default function EnterpriseCustomersPage() {
       setDeletingCustomer(null);
       fetchCustomers();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }

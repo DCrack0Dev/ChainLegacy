@@ -111,7 +111,7 @@ export function EnterpriseBeneficiariesContent() {
       resetForm();
       fetchBeneficiaries();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -122,10 +122,10 @@ export function EnterpriseBeneficiariesContent() {
     setSubmitting(true);
     try {
       // Would need DELETE endpoint
-      alert('Delete endpoint not yet implemented');
+      console.error('Delete endpoint not yet implemented');
       setDeletingBeneficiary(null);
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }

@@ -115,7 +115,7 @@ export default function EnterpriseAuditPage() {
       }
       setShowExportModal(false);
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setExporting(false);
     }
@@ -307,7 +307,7 @@ export default function EnterpriseAuditPage() {
                       {event.details ? (
                         <button
                           className="text-blue-400 hover:text-blue-300 text-left underline"
-                          onClick={() => alert(JSON.stringify(event.details, null, 2))}
+                          onClick={() => console.error(JSON.stringify(event.details, null, 2))}
                         >
                           View Details
                         </button>

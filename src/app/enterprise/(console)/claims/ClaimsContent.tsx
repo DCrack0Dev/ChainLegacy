@@ -125,7 +125,7 @@ export function EnterpriseClaimsContent() {
       resetForm();
       fetchClaims();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -135,10 +135,10 @@ export function EnterpriseClaimsContent() {
     if (!viewingClaim) return;
     setSubmitting(true);
     try {
-      alert('Delete endpoint not yet implemented');
+      console.error('Delete endpoint not yet implemented');
       setViewingClaim(null);
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }

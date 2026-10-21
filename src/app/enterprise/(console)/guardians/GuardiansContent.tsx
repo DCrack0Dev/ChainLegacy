@@ -132,7 +132,7 @@ export function EnterpriseGuardiansContent() {
       resetForm();
       fetchGuardians();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -142,10 +142,10 @@ export function EnterpriseGuardiansContent() {
     if (!deletingGuardian) return;
     setSubmitting(true);
     try {
-      alert('Delete endpoint not yet implemented');
+      console.error('Delete endpoint not yet implemented');
       setDeletingGuardian(null);
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }

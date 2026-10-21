@@ -51,7 +51,7 @@ export default function EnterpriseSettingsPage() {
 
   const handleResetSecret = async (type: string) => {
     if (confirm(`Rotate ${type}? This will invalidate the current secret.`)) {
-      alert(`${type} rotation - implement endpoint`);
+      console.error(`${type} rotation - implement endpoint`);
     }
   };
 

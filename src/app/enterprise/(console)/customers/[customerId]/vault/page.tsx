@@ -102,13 +102,13 @@ export default function EnterpriseCustomerVaultPage() {
       setVault(data.vault);
       setShowCreateModal(false);
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     }
   };
 
   const handleUpdateInterval = async (newInterval: number) => {
     // Would need PATCH endpoint - for now just show
-    alert('Interval update requires PATCH endpoint');
+    console.error('Interval update requires PATCH endpoint');
   };
 
   const getStatusConfig = (status: string) => {

@@ -96,7 +96,7 @@ export default function EnterpriseLivenessPage() {
       setResetReason('');
       fetchPlans();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }

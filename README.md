@@ -48,20 +48,10 @@ CRON_SECRET=<32-byte random hex; e.g. openssl rand -hex 32>
 ```
 
 ### 3. Firestore Rules
-I've added [firestore.rules](file:///c:/Users/Thiza\Documents\trae_projects\CHainLegacy\firestore.rules) to the project root for reference. You should apply these rules in your Firebase Console under **Firestore Database > Rules**.
-
-```javascript
-rules_version = '2';
-
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if
-          request.time < timestamp.date(2026, 4, 23);
-    }
-  }
-}
-```
+The checked-in [`firestore.rules`](firestore.rules) file is the source of truth. Deploy it with
+`firebase deploy --only firestore:rules` after selecting your Firebase project. Enterprise
+collections are deny-by-default because they are accessed through the Firebase Admin SDK;
+never replace these rules with a time-based or catch-all allow rule.
 
 ### 4. Install Dependencies
 ```bash
@@ -75,8 +65,11 @@ npm run lint
 npm run typecheck
 npm run test
 npm run test:coverage
+npm run audit:production
 ```
-CI runs these checks, plus `npm audit --audit-level=high`, on every push to `main` and every pull request.
+CI runs these checks on every push to `main` and every pull request. The production audit is a
+blocking gate; dependency exceptions and their upgrade plan are documented in
+[`SECURITY_DEPENDENCY_REVIEW.md`](SECURITY_DEPENDENCY_REVIEW.md).
 
 ### 6. Run Locally
 ```bash

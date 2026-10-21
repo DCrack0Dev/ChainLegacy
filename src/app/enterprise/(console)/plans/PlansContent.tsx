@@ -134,7 +134,7 @@ export function EnterprisePlansContent() {
       resetForm();
       fetchPlans();
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }
@@ -145,10 +145,10 @@ export function EnterprisePlansContent() {
     setSubmitting(true);
     try {
       // Would need DELETE endpoint
-      alert('Delete endpoint not yet implemented');
+      console.error('Delete endpoint not yet implemented');
       setDeletingPlan(null);
     } catch (err: any) {
-      alert(err.message);
+      console.error(err.message);
     } finally {
       setSubmitting(false);
     }

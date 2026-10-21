@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { z } from 'zod';
+import { createApiKeyPrefix, createId } from '@/services/enterprise/persistence';
+import { API_SCOPES } from '@/types/enterprise';
+import { createHash, randomBytes } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +51,7 @@ export async function GET(request: Request) {
       meta: { limit, offset, hasMore, total: items.length + offset },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Enterprise API Keys List] Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
@@ -57,8 +60,8 @@ export async function GET(request: Request) {
 const CreateApiKeySchema = z.object({
   name: z.string().min(1),
   env: z.enum(['sandbox', 'production']).default('sandbox'),
-  scopes: z.array(z.string()).default([]),
-  expiresAt: z.string().optional(),
+  scopes: z.array(z.enum(API_SCOPES)).default([]),
+  expiresAt: z.coerce.date().optional(),
 });
 
 export async function POST(request: Request) {
@@ -78,10 +81,10 @@ export async function POST(request: Request) {
     }
     const db = adminDb;
 
-    const apiKeyId = `k_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const prefix = env === 'production' ? 'clprod_' : 'clsbox_';
-    const secret = `${prefix}${apiKeyId}.${require('crypto').randomBytes(32).toString('base64url')}`;
-    const keyHash = require('crypto').createHash('sha256').update(secret).digest('hex');
+    const apiKeyId = createId('apiKey');
+    const prefix = createApiKeyPrefix(env);
+    const secret = `${prefix}${apiKeyId}.${randomBytes(32).toString('base64url')}`;
+    const keyHash = createHash('sha256').update(secret).digest('hex');
     const now = new Date();
 
     const apiKey = {
@@ -92,7 +95,7 @@ export async function POST(request: Request) {
       prefix,
       keyHash,
       scopes,
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      expiresAt: expiresAt ?? null,
       lastUsedAt: null,
       revokedAt: null,
       disabled: false,
@@ -106,7 +109,7 @@ export async function POST(request: Request) {
     // Return the secret only once
     return NextResponse.json({ apiKey: { ...apiKey, secret } }, { status: 201 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Enterprise API Key Create] Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

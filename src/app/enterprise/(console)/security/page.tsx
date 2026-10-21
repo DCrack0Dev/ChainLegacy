@@ -18,8 +18,8 @@ export default function EnterpriseSecurityPage() {
         { label: 'Firestore rules', value: 'server-admin only' },
       ]}
       cta={[
-        { label: 'Rotate Org Webhook Secret', variant: 'secondary', action: () => alert('Rotate webhook secret - implement endpoint') },
-        { label: 'Rotate API Key', variant: 'secondary', action: () => alert('Rotate API key - implement endpoint') },
+        { label: 'Rotate Org Webhook Secret', variant: 'secondary', action: () => console.error('Rotate webhook secret - implement endpoint') },
+        { label: 'Rotate API Key', variant: 'secondary', action: () => console.error('Rotate API key - implement endpoint') },
       ]}
     >
       <div className="space-y-8">

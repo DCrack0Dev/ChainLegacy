@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "test:emulator": "vitest run --project emulator",
     "emulator:start": "firebase emulators:start --only firestore",
-    "audit": "npm audit --audit-level=high"
+    "audit": "npm run audit:production",
+    "audit:production": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.1",
