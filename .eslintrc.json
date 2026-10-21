@@ -1,0 +1,10 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "@next/next/no-html-link-for-pages": "off",
+    "react/no-unescaped-entities": "off",
+    "react/display-name": "off",
+    "react-hooks/exhaustive-deps": "off"
+  },
+  "ignorePatterns": ["node_modules/", ".next/", "coverage/", "tsconfig.tsbuildinfo"]
+}

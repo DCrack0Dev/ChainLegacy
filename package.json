@@ -9,12 +9,14 @@
     "migrate:consumer": "ts-node src/scripts/migrate-consumer-to-enterprise.ts",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --max-warnings=0",
     "typecheck": "tsc --noEmit --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:emulator": "vitest run --project emulator"
+    "test:emulator": "vitest run --project emulator",
+    "emulator:start": "firebase emulators:start --only firestore",
+    "audit": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.1",

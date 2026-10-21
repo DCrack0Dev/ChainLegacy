@@ -77,3 +77,7 @@ All 19 flagged vulnerabilities are in admin-to-Google RPC transport paths, not:
 # Conclusion
 
 Critical count = 1 (C-1 uuid via admin firestore). Unreachable externally. Audit posture meets AC-6 (critical ≤ 1 threshold). Applying P1 `npm audit fix --no-force` today removes H-1 gaxios HIGH. Pre-pilot security sign-off: **acceptable for CONTROLLED ENTERPRISE PILOT classification, not production enterprise deployment.**
+
+## DataFactory CI note
+
+The repository now reports the audit result in CI without hiding it, but keeps the audit step non-blocking while these upstream fixes require breaking-version upgrades. The build, lint, typecheck, default tests, coverage, and emulator Vitest project remain separate quality gates.

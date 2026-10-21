@@ -65,16 +65,34 @@ service cloud.firestore {
 
 ### 4. Install Dependencies
 ```bash
-npm install
+npm ci
 ```
+`npm ci` uses the committed `package-lock.json` and is the supported clean-clone install path.
 
-### 4. Run Locally
+### 5. Run the quality checks
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run test:coverage
+```
+CI runs these checks, plus `npm audit --audit-level=high`, on every push to `main` and every pull request.
+
+### 6. Run Locally
 ```bash
 npm run dev
 ```
 The app will be available at [http://localhost:3000](http://localhost:3000).
 
-### 5. Simulate Status Check (Cron Job)
+### 7. Run Firestore emulator tests
+The emulator suite requires a running Firestore emulator. In two terminals, run:
+```bash
+npm run emulator:start
+npm run test:emulator
+```
+The checked-in `firebase.json`, `.firebaserc`, and `firestore.rules` make this work without a Firebase account. Set `FIREBASE_EMULATOR=true` in `.env.local` when exercising emulator-backed application flows.
+
+### 8. Simulate Status Check (Cron Job)
 To trigger the status check logic manually:
 ```bash
 curl http://localhost:3000/api/cron/check-status -H "Authorization: Bearer your_cron_secret"
