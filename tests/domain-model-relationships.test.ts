@@ -65,6 +65,15 @@ class FakeFirestore {
             const data = self.docs.get(self.key(path, id));
             return { exists: data !== undefined, id, data: () => data };
           },
+          async set(data: any) {
+            self.docs.set(self.key(path, id), { ...data });
+            self.writes += 1;
+          },
+          async update(patch: any) {
+            const current = self.docs.get(self.key(path, id)) ?? {};
+            self.docs.set(self.key(path, id), { ...current, ...patch });
+            self.writes += 1;
+          },
         };
         // Support sub-collections (organizations/{org}/customers/{id}) so the
         // loaders under test walk the real Firestore path shape.

@@ -39,6 +39,15 @@ class FakeFirestore {
             const data = self.docs.get(self.key(path, id));
             return { exists: data !== undefined, id, data: () => data };
           },
+          async set(data: any) {
+            self.docs.set(self.key(path, id), { ...data });
+            self.writes += 1;
+          },
+          async update(patch: any) {
+            const current = self.docs.get(self.key(path, id)) ?? {};
+            self.docs.set(self.key(path, id), { ...current, ...patch });
+            self.writes += 1;
+          },
         };
         ref.collection = (sub: string) => self.collection(`${path}/${id}/${sub}`);
         return ref;
