@@ -8,6 +8,7 @@ import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { motion, AnimatePresence } from 'framer-motion';
+import { logSystemEvent } from '@/lib/logger';
 
 type ApiKey = {
   id: string;
@@ -88,8 +89,10 @@ export default function EnterpriseApiKeysPage() {
         production: allKeys.filter((k: ApiKey) => k.env === 'production').length,
         revoked: allKeys.filter((k: ApiKey) => k.revokedAt).length,
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unexpected request failure';
+      setError(message);
+      void logSystemEvent({ type: 'error', message, source: 'EnterpriseApiKey' });
     } finally {
       setLoading(false);
     }
@@ -118,8 +121,10 @@ export default function EnterpriseApiKeysPage() {
       setShowCreateModal(false);
       resetForm();
       fetchApiKeys();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unexpected request failure';
+      setError(message);
+      void logSystemEvent({ type: 'error', message, source: 'EnterpriseApiKey' });
     } finally {
       setSubmitting(false);
     }
@@ -130,10 +135,12 @@ export default function EnterpriseApiKeysPage() {
     setSubmitting(true);
     try {
       // Would need PATCH endpoint
-      alert('Revoke endpoint not yet implemented');
+      setError('Revoke endpoint is not yet implemented.');
       setRevokingKey(null);
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unexpected request failure';
+      setError(message);
+      void logSystemEvent({ type: 'error', message, source: 'EnterpriseApiKey' });
     } finally {
       setSubmitting(false);
     }

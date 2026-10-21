@@ -8,6 +8,7 @@ import { EnterpriseSkeleton } from '@/components/enterprise/EnterpriseSkeleton';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { motion, AnimatePresence } from 'framer-motion';
+import { logSystemEvent } from '@/lib/logger';
 
 type Webhook = {
   id: string;
@@ -93,8 +94,10 @@ export default function EnterpriseWebhooksPage() {
         disabled: allWebhooks.filter((w: Webhook) => !w.enabled).length,
         pendingDeliveries: allWebhooks.reduce((sum: number, w: Webhook) => sum + (w.consecutiveFailures || 0), 0),
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unexpected request failure';
+      setError(message);
+      void logSystemEvent({ type: 'error', message, source: 'EnterpriseWebhook' });
     } finally {
       setLoading(false);
     }
@@ -123,8 +126,10 @@ export default function EnterpriseWebhooksPage() {
       setShowCreateModal(false);
       resetForm();
       fetchWebhooks();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unexpected request failure';
+      setError(message);
+      void logSystemEvent({ type: 'error', message, source: 'EnterpriseWebhook' });
     } finally {
       setSubmitting(false);
     }
@@ -134,10 +139,12 @@ export default function EnterpriseWebhooksPage() {
     if (!deletingWebhook) return;
     setSubmitting(true);
     try {
-      alert('Delete endpoint not yet implemented');
+      setError('Delete endpoint is not yet implemented.');
       setDeletingWebhook(null);
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unexpected request failure';
+      setError(message);
+      void logSystemEvent({ type: 'error', message, source: 'EnterpriseWebhook' });
     } finally {
       setSubmitting(false);
     }
@@ -153,7 +160,7 @@ export default function EnterpriseWebhooksPage() {
 
   const handleCopySecretText = (secret: string) => {
     navigator.clipboard.writeText(secret);
-    alert('Secret copied to clipboard');
+    void logSystemEvent({ type: 'success', message: 'Webhook secret copied to clipboard', source: 'EnterpriseWebhooks' });
   };
 
   const resetForm = () => {

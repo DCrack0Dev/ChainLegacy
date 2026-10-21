@@ -33,14 +33,6 @@ export default function ClaimClient({ id, initialData }: { id: string, initialDa
   // Verification fields
   const [step, setStep] = useState(1); 
 
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="h-12 w-12 border-2 border-gold/20 border-t-gold rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   const handleVerifyWallet = async () => {
     if (!address) return;
     setSigning(true);
@@ -88,6 +80,15 @@ export default function ClaimClient({ id, initialData }: { id: string, initialDa
       setError('This legacy process has not been triggered yet.');
     }
   }, [initialData]);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="h-12 w-12 border-2 border-gold/20 border-t-gold rounded-full animate-spin" />
+      </div>
+    );
+  }
+
 
   const handleVerifyIdentity = async (e: React.FormEvent) => {
     e.preventDefault();

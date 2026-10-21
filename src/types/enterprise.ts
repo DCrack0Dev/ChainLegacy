@@ -355,3 +355,20 @@ export const WebhookEndpointSchema = z.object({
 });
 export type WebhookEndpoint = z.infer<typeof WebhookEndpointSchema>;
 export const WebhookEndpointCreateSchema = WebhookEndpointSchema.omit({ id: true, organizationId: true, secret: true, signingAlgo: true, consecutiveFailures: true, disabledAt: true, lastDeliveredAt: true, createdAt: true });
+
+export type EnterpriseApiErrorPayload = {
+  code?: string;
+  error: string;
+  details?: unknown;
+  requestId?: string;
+};
+
+export type EnterpriseListResponse<T> = {
+  data: T[];
+  meta?: { total?: number; limit?: number; offset?: number };
+};
+
+export type EnterpriseCreateResponse<T> = {
+  apiKey?: T & { secret?: string };
+  webhook?: T & { secret?: string };
+};
