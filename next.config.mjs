@@ -1,17 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   images: {
     formats: ['image/avif', 'image/webp'],
   },
-  experimental: {
-    serverComponentsExternalPackages: ["firebase-admin"],
-  },
+  serverExternalPackages: ['firebase-admin'],
   webpack: (config, { isServer }) => {
     // Fix: @metamask/sdk (deprecated, transitive via @wagmi/connectors@6.2.0)
     // conditionally imports @react-native-async-storage/async-storage for React Native.
     // This is a web-only app, so provide a no-op fallback to avoid build error.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      /Can't resolve '@react-native-async-storage\/async-storage'/,
+    ];
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@react-native-async-storage/async-storage': false,
+    };
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,

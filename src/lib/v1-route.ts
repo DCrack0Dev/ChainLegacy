@@ -74,7 +74,8 @@ function routePathFromUrl(url: string): string {
 }
 
 export function v1Route<TBody = unknown>(opts: V1RouteArgs<TBody>) {
-  return async function (request: NextRequest | Request, params?: { params?: Record<string, string> }): Promise<Response> {
+  return async function (request: NextRequest | Request, context: { params: Promise<any> }): Promise<Response> {
+    const params = await context.params;
     const requestId = extractRequestId(request);
     let idempotencyLock: { id: string; orgId: string; key: string } | null = null;
     try {
@@ -260,7 +261,7 @@ export function v1Route<TBody = unknown>(opts: V1RouteArgs<TBody>) {
         request,
         auth,
         body,
-        params: params?.params ?? {},
+        params: params ?? {},
         pagination,
         idempotencyKey,
         requestId,

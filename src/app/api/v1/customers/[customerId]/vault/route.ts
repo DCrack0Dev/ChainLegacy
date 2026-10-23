@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(
   request: Request,
-  { params }: { params: { customerId: string } }
+  context: { params: Promise<{ customerId: string }> }
 ) {
+  const { customerId } = await context.params;
   try {
-    const { customerId } = params;
     const orgId = 'org_legacy_migration';
     const body = await request.json();
     const { name, intervalDays } = body;
@@ -78,10 +78,10 @@ export async function POST(
 
 export async function GET(
   request: Request,
-  { params }: { params: { customerId: string } }
+  context: { params: Promise<{ customerId: string }> }
 ) {
+  const { customerId } = await context.params;
   try {
-    const { customerId } = params;
     const orgId = 'org_legacy_migration';
 
     if (!adminDb) {

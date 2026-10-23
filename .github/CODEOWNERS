@@ -1,0 +1,9 @@
+* @DCrack0Dev
+
+# Security and data-boundary code
+/src/lib/firebase-admin.ts @DCrack0Dev
+/src/lib/api-auth.ts @DCrack0Dev
+/src/lib/v1-route.ts @DCrack0Dev
+/src/services/enterprise/ @DCrack0Dev
+/firestore.rules @DCrack0Dev
+/.github/workflows/ @DCrack0Dev

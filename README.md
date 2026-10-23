@@ -3,7 +3,7 @@
 ChainLegacy is a secure web application that ensures your digital assets are safely passed to your beneficiaries if you miss your check-in interval.
 
 ## Tech Stack
-- **Frontend**: Next.js 14 (App Router)
+- **Frontend**: Next.js 15 (App Router)
 - **Styling**: Tailwind CSS (Dark/Gold theme)
 - **Backend**: Next.js API Routes & Server Actions
 - **Database**: Firebase Firestore
@@ -65,6 +65,8 @@ npm run lint
 npm run typecheck
 npm run test
 npm run test:coverage
+npm run test:emulator
+npm run build
 npm run audit:production
 ```
 CI runs these checks on every push to `main` and every pull request. The production audit is a
@@ -84,6 +86,10 @@ npm run emulator:start
 npm run test:emulator
 ```
 The checked-in `firebase.json`, `.firebaserc`, and `firestore.rules` make this work without a Firebase account. Set `FIREBASE_EMULATOR=true` in `.env.local` when exercising emulator-backed application flows.
+
+## Contributing and releases
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for review expectations and the complete clean-clone gate. Release notes are maintained in [`CHANGELOG.md`](CHANGELOG.md).
 
 ### 8. Simulate Status Check (Cron Job)
 To trigger the status check logic manually:

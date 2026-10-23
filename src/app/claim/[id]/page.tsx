@@ -6,8 +6,8 @@ import { AlertTriangle } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ClaimPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function ClaimPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   let userData = null;
   let error = '';
 
