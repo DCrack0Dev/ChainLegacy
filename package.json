@@ -89,6 +89,8 @@
     "dompurify": "^3.4.17",
     "follow-redirects": "^1.16.1",
     "source-map-js": "^1.2.2",
-    "postcss": "8.5.31"
+    "postcss": "8.5.31",
+    "hono": "^4.13.11",
+    "uuid": "$uuid"
   }
 }
