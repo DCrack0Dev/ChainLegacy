@@ -45,7 +45,7 @@
     "shamir-secret-sharing": "^0.0.4",
     "stripe": "^21.0.1",
     "tailwind-merge": "^2.2.1",
-    "uuid": "^11.0.2",
+    "uuid": "^14.0.3",
     "viem": "^2.21.54",
     "wagmi": "^2.14.3",
     "zod": "^3.22.4"
