@@ -7,8 +7,6 @@ const SENDGRID_FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL;
 
 if (SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
-} else {
-  console.error('CRITICAL: SENDGRID_API_KEY is missing from environment variables.');
 }
 
 /**

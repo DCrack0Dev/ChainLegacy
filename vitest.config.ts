@@ -18,6 +18,12 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
       include: ['src/lib/**', 'src/services/**', 'src/types/**'],
+      thresholds: {
+        statements: 50,
+        lines: 50,
+        functions: 45,
+        branches: 70,
+      },
     },
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -59,4 +65,3 @@ export default defineConfig({
     },
   },
 });
-

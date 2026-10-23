@@ -5,10 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: Request,
-  { params }: { params: { customerId: string } }
+  context: { params: Promise<{ customerId: string }> }
 ) {
+  const { customerId } = await context.params;
   try {
-    const { customerId } = params;
     const orgId = 'org_legacy_migration';
 
     if (!adminDb) {
@@ -33,10 +33,10 @@ export async function GET(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { customerId: string } }
+  context: { params: Promise<{ customerId: string }> }
 ) {
+  const { customerId } = await context.params;
   try {
-    const { customerId } = params;
     const orgId = 'org_legacy_migration';
 
     if (!adminDb) {
